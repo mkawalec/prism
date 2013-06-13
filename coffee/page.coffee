@@ -9,7 +9,7 @@ letter = (spec, that) ->
     )
 
     submit = p.route('submit-sig', (target) ->
-        console.log 'submitted', target
+        alert 'submitted', target
     )
 
     # Constructor
