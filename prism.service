@@ -1,0 +1,13 @@
+[Unit]
+Description=Proces serwerowy PRISM
+After=network.target postgresql.service redis.service
+
+[Service]
+Type=simple
+ExecStart=/var/www/prism/run_uwsgi.sh michal
+ExecReload=kill -HUP `cat /tmp/prism.pid`
+KillMode=control-group
+TimeoutStopSec=2
+
+[Install]
+WantedBy=multi-user.target
