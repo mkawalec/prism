@@ -129,7 +129,7 @@ notifier = (spec, that) ->
     code_messages = {
         500: {
             type: 'error'
-            message: __ 'A server error has occured. We are investigating it'
+            message: 'Nastąpił błąd serwera. Sprawa jest badana...'
         }
     }
 
@@ -137,19 +137,6 @@ notifier = (spec, that) ->
         1: {
             type: 'success'
             message: __ 'The action has succeeded'
-        }
-        'payment_success': {
-            type: 'success'
-            message: __ 'Your payment was processed successfully'
-        }
-        'payment_error': {
-            type: 'error'
-            message: __('There was an error authorizing your transaction '
-                'and it failed')
-        }
-        'payment_form_error': {
-            type: 'error'
-            message: __ 'Some of the details you entered are incorrect'
         }
     }
 
@@ -525,7 +512,7 @@ imagelist = (spec, that) ->
 
 cache = singleton((spec, that) ->
     that = that ? {}
-    timeout = spec.timeout ? 3600
+    timeout = spec.timeout ? 60
 
     # A cache object structure:
     # obj = {
@@ -597,6 +584,7 @@ palantir = singleton((spec, that) ->
     _.extend _that, notifier(spec)
     _.extend _that, helpers(spec)
 
+    routes = {}
 
     tout = spec.timeout ? 120
     base_url = spec.base_url ? url_root
@@ -664,14 +652,31 @@ palantir = singleton((spec, that) ->
 
     that.template = (name, where, object) ->
         that.open {
-            url: base_url + "static/templates/#{ name }"
+            url: base_url + "templates/#{ name }"
             success: (data) ->
                 data = _template.parse data
                 where.html data
 
                 _template.bind where, object
-            tout: 3600
+            tout: 3600*24
         }
+    
+    that.route = (route, fn) ->
+        routes.push({route: route, fn: fn})
+
+        () ->
+            fn.apply(null, arguments)
+
+    # Constructor
+    setTimeout((() ->
+        $(window).on 'hashchange', (e) ->
+            e.preventDefault()
+            e.stopPropagation()
+
+            res = _.where(routes, {route: window.location.hash.slice(1)})
+            if res.length > 0
+                res[0].fn()
+    ), 0)
 
     inheriter = _.partial init, palantir, that, spec
     _template = inheriter(template)
