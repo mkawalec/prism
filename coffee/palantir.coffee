@@ -4,8 +4,9 @@
 ##                          ##
 ##############################
 
-# TODO: Change the order to be partial-friendly (inherited
-# is the last argument)
+__ = (str) -> 
+    return str
+
 init = (initiator, public_initiator, spec, inherited) ->
     _helpers = helpers()
 
@@ -213,10 +214,7 @@ template = (spec, that) ->
         for element in where.find('[data-click]')
             $(element).on 'click', (e) ->
                 e.preventDefault()
-                if string_id?
-                    actions_object[$(@).attr('data-click')](string_id)
-                else
-                    actions_object[$(@).attr('data-click')]()
+                _libs.goto $(@).attr('data-click'), @
 
         for element in $(where).find('[data-source]')
             ((element) ->
@@ -326,7 +324,7 @@ template = (spec, that) ->
 
     that.open = (name, where, object, action='add', string_id) ->
         _libs.open {
-            url: base_url + "static/templates/#{ name }"
+            url: base_url + "templates/#{ name }"
             success: (data) ->
                 data = that.parse data
                 where.html data
@@ -584,7 +582,7 @@ palantir = singleton((spec, that) ->
     _.extend _that, notifier(spec)
     _.extend _that, helpers(spec)
 
-    routes = {}
+    routes = []
 
     tout = spec.timeout ? 120
     base_url = spec.base_url ? url_root
@@ -604,13 +602,13 @@ palantir = singleton((spec, that) ->
         _cache.set(key, 'waiting', 15)
         return fn data
 
-    save_cache = (fn, cache_key) ->
+    save_cache = (fn, cache_key, new_timeout) ->
                     (data) ->
                         if not data.req_time?
                             if typeof data == 'string'
-                                _cache.set(cache_key, { data: data })
+                                _cache.set(cache_key, { data: data }, new_timeout)
                             else
-                                _cache.set(cache_key, data)
+                                _cache.set(cache_key, data, new_timeout)
 
                         fn data
     
@@ -645,20 +643,21 @@ palantir = singleton((spec, that) ->
 
         req_data.error = on_error(req_data.success, req_data.error, key)
         if req_data.type == 'GET' and req_data.palantir_cache != false
-            req_data.success = save_cache(req_data.success, key)
+            req_data.success = save_cache(req_data.success, key, 
+                req_data.palantir_timeout)
 
         args = [$.ajax, req_data, req_data.tout, req_data.caching]
         promise(cached_memoize, args, key)()
 
-    that.template = (name, where, object) ->
+    that.template = (name, where, object={}) ->
         that.open {
             url: base_url + "templates/#{ name }"
             success: (data) ->
                 data = _template.parse data
                 where.html data
 
-                _template.bind where, object
-            tout: 3600*24
+                _template.bind where
+            palantir_timeout: 1
         }
     
     that.route = (route, fn) ->
@@ -666,6 +665,11 @@ palantir = singleton((spec, that) ->
 
         () ->
             fn.apply(null, arguments)
+
+    that.goto = (route, target) ->
+        matching = _.where(routes, {route: route})
+        if matching.length > 0
+            matching[0].fn(target)
 
     # Constructor
     setTimeout((() ->

@@ -29,7 +29,7 @@ build = (callback) ->
             )(row)
 
 task 'watch', 'Watch source for changes', ->
-    coffee = spawn 'coffee', ['-w', '-c', '-l', '-b', '-o', 'static/js', 'coffee']
+    coffee = spawn 'coffee', ['-w', '-c', '-l', '-b', '-o', 'js', 'coffee']
     coffee.stderr.on 'data', (data) ->
         process.stderr.write data.toString()
     coffee.stdout.on 'data', (data) ->
