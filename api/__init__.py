@@ -1,6 +1,6 @@
 # coding=utf-8
 from flask import (Flask, request, redirect, url_for, abort,
-        render_template, flash, jsonify, g, session, send_file)
+        jsonify, g)
 
 from datetime import timedelta, datetime
 
@@ -9,19 +9,13 @@ from sqlalchemy.orm import joinedload
 from sqlalchemy.orm.exc import NoResultFound
 
 from flask.ext.classy import FlaskView
-import redis
    
 app = Flask(__name__)
 app.config.from_object('api.configs.default')
 
 from .models import Signature, ConfCode
 from .database import db_session
-
-redis_pool = redis.ConnectionPool(host='localhost', port=6379, db=0)
-
-@app.before_request
-def before_request():
-    g.redis = redis.Redis(connection_pool=redis_pool)
+from .helpers import stringify_class
 
 @app.route('/')
 def home():
@@ -54,18 +48,18 @@ class SignaturesView(FlaskView):
         if not offset or offset < 0:
             offset = 0
 
-        rv = redis.get('signatures'+offset)
+        rv = g.redis.get('signatures'+str(offset))
         if not rv:
             signatures = db_session.query(Signature).\
                     filter(Signature.confirmed == True).\
                     offset(offset).limit(300).all()
-            amount = db_session.query(Signature).\
+            amount = int(db_session.query(Signature).\
                     filter(Signature.confirmed == True).\
-                    count()
-            rv = dict(signatures=signatures, amount=amount)
+                    count())
 
-            redis.setex('signatures'+offset, rv, 60)
-        return jsonify(strigify_class(rv))
+            rv = dict(signatures=signatures, amount=amount)
+            g.redis.setex('signatures'+str(offset), rv, 60)
+        return jsonify(stringify_class(rv))
 
     def get(self, id):
         try:
