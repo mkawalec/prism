@@ -584,7 +584,11 @@ palantir = singleton((spec, that) ->
 
     routes = []
 
-    tout = spec.timeout ? 120
+    if spec.debug
+        tout = 0
+    else
+        tout = spec.timeout ? 3600*24*2
+
     base_url = spec.base_url ? url_root
     spec.base_url = base_url
 
@@ -657,7 +661,7 @@ palantir = singleton((spec, that) ->
                 where.html data
 
                 _template.bind where
-            palantir_timeout: 1
+            palantir_timeout: tout
         }
     
     that.route = (route, fn) ->

@@ -8,10 +8,6 @@ letter = (spec, that) ->
         p.template('footer.html', $('#footer'))
     )
 
-    submit = p.route('submit-sig', (target) ->
-        alert 'submitted', target
-    )
-
     # Constructor
     setTimeout((() ->
         create()
@@ -21,4 +17,4 @@ letter = (spec, that) ->
 
     return that
 
-open_letter = letter()
+open_letter = letter({ base_url: 'http://localhost:8000/'})
