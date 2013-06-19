@@ -1,9 +1,9 @@
 .container {
-    width: 768px;
+    max-width: 768px;
 }
 
 #body {
-    width: 768px;
+    max-width: 768px;
     float: left;
     margin-left: 0px;
     margin-top: 20px;
@@ -23,7 +23,7 @@ p {
 
 .logos {
     float: left;
-    width: 100;
+    width: 100%;
 }
 
 .logos .logo {
@@ -45,6 +45,7 @@ p {
     width: 100%;
     float: left;
     margin-bottom: 10px;
+    text-indent: 80px;
 }
 
 ul {
