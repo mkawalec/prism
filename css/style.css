@@ -11,6 +11,11 @@
     font:14px/1.5 Lato, "Helvetica Neue", Helvetica, Arial, sans-serif !important;
 }
 
+p {
+    letter-spacing: 1px;
+    text-indent: 40px;
+}
+
 #header {
     float: left;
     margin-top: 20px;
@@ -40,4 +45,8 @@
     width: 100%;
     float: left;
     margin-bottom: 10px;
+}
+
+ul {
+    list-style-image: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAICAYAAADeM14FAAAAVUlEQVR4Xj2MQQoAIQwDs/sgT1686peEvq4v8DsFL0LWrdSBQhqSIKXEDeJebFprxOEYpRTknN30ypyTvXf+2hNmhrUWbkJEWGvlHR1jQFWfGI3H+QDvhi06/rbHiwAAAABJRU5ErkJggg==);
 }
