@@ -744,7 +744,7 @@ palantir = singleton((spec) ->
     if spec.debug
         tout = 0
     else
-        tout = spec.timeout ? 3600*24*2
+        tout = spec.timeout ? 3600*2
 
     base_url = spec.base_url ? (location.href.match /^.*\//)[0]
     if base_url[base_url.length-1] != '/'
