@@ -1,3 +1,30 @@
 .container {
     width: 768px;
 }
+
+#body {
+    width: 768px;
+    float: left;
+    margin-left: 0px;
+    margin-top: 20px;
+}
+
+#header {
+    float: left;
+    margin-top: 20px;
+}
+
+.logos {
+    float: left;
+    width: 100;
+}
+
+.logos .logo {
+    float: left;
+    margin-right: 60px;
+}
+
+.mpolska {
+    margin-right: 0px !important;
+    margin-top: 30px;
+}
