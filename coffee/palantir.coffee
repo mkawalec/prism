@@ -747,7 +747,6 @@ palantir = singleton((spec) ->
         tout = spec.timeout ? 3600*24*2
 
     base_url = spec.base_url ? (location.href.match /^.*\//)[0]
-    console.log base_url
     if base_url[base_url.length-1] != '/'
         base_url += '/'
     spec.base_url = base_url
