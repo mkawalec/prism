@@ -17,5 +17,5 @@ letter = (spec, that) ->
 
     return that
 
-open_letter = letter()
+open_letter = letter({expires: false})
 
