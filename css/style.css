@@ -1,9 +1,9 @@
 .container {
-    max-width: 768px;
+    max-width: 768px !important;
 }
 
 #body {
-    max-width: 768px;
+    max-width: 768px !important;
     float: left;
     margin-left: 0px;
     margin-top: 20px;
