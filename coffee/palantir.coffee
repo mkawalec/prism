@@ -4,8 +4,27 @@
 ##                          ##
 ##############################
 
-__ = (str) -> 
-    return str
+stack = ->
+    that = {}
+
+    store = []
+
+    that.push = (item) ->
+        store.push(item)
+
+    that.pop = ->
+        if store.length == 0
+            return undefined
+
+        item = store[store.length-1]
+        store.splice(store.length-1, 1)
+
+        return item
+
+    that.empty = ->
+        if store.length == 0 then return true else return false
+
+    return that
 
 init = (initiator, public_initiator, spec, inherited) ->
     _helpers = helpers()
@@ -30,18 +49,21 @@ init = (initiator, public_initiator, spec, inherited) ->
 
 singleton = (fn) ->
     return () ->
+        that = arguments[1] ? {}
+
         if singleton.prototype.cached? and \
             singleton.prototype.cached[fn]?
-                return singleton.prototype.cached[fn]
+                return _.extend {}, singleton.prototype.cached[fn], that
 
         if not singleton.prototype.cached?
             singleton.prototype = {}
             singleton.prototype.cached = {}
         singleton.prototype.cached[fn] = (_.partial fn, arguments)()
-        return singleton.prototype.cached[fn]
 
-helpers = singleton((spec, that) ->
-    that = that ? {}
+        return _.extend {}, singleton.prototype.cached[fn], that
+
+helpers = singleton((spec) ->
+    that = {}
 
     chars = 'abcdefghijklmnoprstuwqxyzABCDEFGHIJKLMNOPRSTUWQXYZ0123456789'
 
@@ -61,19 +83,6 @@ helpers = singleton((spec, that) ->
         $(element).replaceWith clone
         return clone
 
-    that.classify = (action) ->
-        switch action
-            when 'info' then return 'info'
-            when 'edit' then return 'warning'
-            when 'delete' then return 'danger'
-
-    that.name = (action) ->
-        switch action
-            when 'delete' then return __ 'Delete'
-            when 'info' then return __ 'Info'
-            when 'edit' then return __ 'Edit'
-        return __ action
-
     that.is_number = (data) ->
         return not isNaN(parseFloat(data)) and isFinite(data)
 
@@ -83,26 +92,94 @@ helpers = singleton((spec, that) ->
             ret.push chars[Math.floor(chars.length*Math.random())]
         return ret.join ''
 
+    that.deep_copy = (obj) ->
+        if Object.prototype.toString.call(obj) == '[object Array]'
+            ret = []
+            for el in obj
+                ret.push(that.deep_copy(el))
+            return ret
+        else if typeof obj == 'object'
+            ret = {}
+            for param, value of obj
+                ret[param] = that.deep_copy(value)
+            return ret
+
+        return obj
+
+    that.delay = (fn) ->
+        setTimeout(fn, 0)
+
+    return that
+)
+
+gettext = singleton((spec, that) ->
+    if spec[0]?
+        spec = spec[0]
+    that = that ? {}
+
+    lang = spec.lang ? ($('html').attr('lang') ? 'en')
+    default_lang = spec.default_lang ? 'en'
+
+    translations_url = spec.translations_url ? "#{ spec.base_url }translations/"
+
+    translations = {}
+
+    that.gettext = (text, new_lang=lang) ->
+        if translations[new_lang] == undefined
+            if new_lang != default_lang
+                getlang(new_lang)
+            else
+                return text
+
+        if translations[new_lang] == null
+            return text
+
+        if not translations[new_lang][text]?
+            return text
+        return translations[new_lang][text]
+
+    getlang = (to_get) ->
+        p.open {
+            url: "#{ translations_url+to_get }.json"
+            async: false
+            success: (data) ->
+                translations[to_get] = data
+            error: (data) ->
+                if data.status == 404
+                    translations[to_get] = null
+            palantir_timeout: 3600*48
+        }
+
+    inheriter = _.partial init, gettext, that, spec
+    p = inheriter palantir
+
     return that
 )
 
 notifier = (spec, that) ->
     that = that ? {}
+    _helpers = helpers(spec)
 
     placeholder = $('#alerts')
 
     that.notify = (req_data) ->
-        if not messages[req_data]?
-            if code_messages[req_data.status]?
-                show_message(code_messages, req_data.status)
+        if not messages.get_message(req_data)?
+            if messages.get_code_message(req_data.status)?
+                show_message(messages.get_code_message, req_data.status)
                 return
             return
 
-        show_message(messages, req_data)
+        show_message(messages.get_message, req_data)
+
+    that.extend_code_messages = (data) ->
+        messages.extend_code_messages data
+
+    that.extend_messages = (data) ->
+        messages.extend_messages data
           
-    show_message = (messages, key) ->
+    show_message = (fn, key) ->
         alert = $('<div/>', {
-            class: "alert alert-#{ messages[key].type }"
+            class: "alert alert-#{ fn(key).type }"
         })
 
         close_button = $('<button/>', {
@@ -111,13 +188,13 @@ notifier = (spec, that) ->
             text: 'x'
         })
         close_button.on 'click', (e) ->
-            alert.hide 'slide', 'fast', ->
+            alert.hide 'slide',  ->
                 for el in placeholder.find('.ui-effects-wrapper')
                     placeholder[0].removeChild el
 
         message_wrapper = $('<div/>', {
             class: 'message_wrapper'
-            text: messages[key].message
+            text: fn(key).message
         })
 
         alert.append close_button
@@ -125,21 +202,47 @@ notifier = (spec, that) ->
         alert.hide()
 
         placeholder.append alert
-        alert.show 'slide', 'fast'
+        alert.show 'slide'
 
-    code_messages = {
-        500: {
-            type: 'error'
-            message: 'Nastąpił błąd serwera. Sprawa jest badana...'
-        }
-    }
+    inheriter = _.partial init, notifier, that, spec
+    p = inheriter(palantir)
+    __ = p.gettext.gettext
 
-    messages = {
-        1: {
-            type: 'success'
-            message: __ 'The action has succeeded'
+    messages = (singleton ->
+        code_messages = {
+            500: {
+                type: 'error'
+                message: __ 'An internal server error has occured'
+            }
+            0: {
+                type: 'error'
+                message: __ 'An unspecified communication error has occured'
+            }
         }
-    }
+
+        messages = {
+            1: {
+                type: 'success'
+                message: __ 'The action has succeeded'
+            }
+        }
+
+        that = {}
+
+        that.get_code_message = (code) ->
+            return code_messages[code]
+
+        that.get_message = (code) ->
+            return messages[code]
+
+        that.extend_code_messages = (data) ->
+            _.extend code_messages, data
+
+        that.extend_messages = (data) ->
+            _.extend messages, data
+
+        return that
+    )()
 
     return that
 
@@ -153,9 +256,6 @@ template = (spec, that) ->
 
     _libs = {}
     _.extend _libs, helpers(spec)
-
-    base_url = spec.base_url ? url_root
-    spec.base_url = base_url
 
     translate = (_, text) ->
         return __ $.trim text
@@ -239,13 +339,19 @@ template = (spec, that) ->
                 if contents == 'null'
                     return $(element).html(__ 'No category')
 
-                if $(element).attr('data-tag')?
-                    tag_renderers[$(element).attr('data-tag')] element, data
+                data_tag = $(element).attr('data-tag')
+                if data_tag?
+                    if tag_renderers[data_tag]?
+                        tag_renderers[data_tag] element, data
+                    else tag_renderers.div element, data
                 else
                     if not element.tagName?
                         tag_renderers.div element, data, contents
                     else
-                        tag_renderers[element.tagName.lower()] element, data
+                        tag_name = element.tagName.lower()
+                        if tag_renderers[tag_name]?
+                            tag_renderers[tag_name] element, data
+                        else tag_renderers.div element, data
 
                 if actions? and actions.add
                     _libs.open {
@@ -268,13 +374,6 @@ template = (spec, that) ->
                 if el.string_id == contents
                     $(element).html el[$(element).attr('data-binding')]
                     break
-
-        imagelist: (element, data, clear=true, offset=0) ->
-            _imagelist = imagelist({element: element})
-            if clear
-                _imagelist.create(data)
-            else
-                _imagelist.render(data, offset)
 
         checklist: (element, data) ->
             element = _helpers.clone(element)
@@ -324,7 +423,7 @@ template = (spec, that) ->
 
     that.open = (name, where, object, action='add', string_id) ->
         _libs.open {
-            url: base_url + "templates/#{ name }"
+            url: spec.base_url + "templates/#{ name }"
             success: (data) ->
                 data = that.parse data
                 where.html data
@@ -337,179 +436,22 @@ template = (spec, that) ->
 
             tout: 3600
         }
+
+    that.extend_renderers = (extensions) ->
+        _.extend tag_renderes, spec.tag_renderers
     
     inheriter = _.partial init, template, that, spec
     _.extend _libs, inheriter(palantir)
     _helpers = inheriter(helpers)
     _notifier = inheriter(notifier)
+    __ = inheriter(gettext).gettext
 
     return that
 
-imagelist = (spec, that) ->
-    that = that ? {}
+cache = singleton((spec) ->
+    that = {}
+    _helpers = helpers(spec)
 
-    element = null
-    images = null
-    controls = null
-    root = null
-    img_type = /image.*/
-
-    that.create = (data) ->
-        element = _helpers.clone(spec.element)
-        root = $(element).attr('data-source')
-
-        images = $('<div/>', {
-            class: 'images'
-        })
-        controls = $('<div/>', {
-            class: 'controls'
-        })
-        element.append images
-        element.append controls
-
-        if data.more
-            controls.append($('<button/>', {
-                class: 'btn btn-more btn-large'
-                html: $('<i/>', {class: 'icon-plus'})
-            }))
-
-        controls.append($('<input/>', {
-            type: 'file'
-            id: 'image-upload'
-            style: 'display:none;'
-            multiple: 'true' 
-            accept: "image/*"
-        }))
-        controls.find('#image-upload').on 'change', add_image
-
-        controls.append($('<button/>', {
-            class: 'btn btn-success btn-upload btn-large'
-            html: $('<i/>', {class: 'icon-upload'})
-        }))
-        controls.find('button.btn-upload').on 'click', (e) ->
-            e.preventDefault()
-            $('#image-upload').click()
-
-        that.render(data, 0)
-
-    add_image = (event) ->
-        for file in @files
-            if not file.type.match img_type
-                continue
-            img = $('<div/>', {
-                class: 'image'
-            })
-
-            image = $('<img/>')
-            img.append image
-            images.prepend img
-            image[0].file = file
-
-            reader = new FileReader()
-            ((image) ->
-                $(reader).on 'load', (e) ->
-                    image[0].src = e.target.result
-            )(image)
-            reader.readAsDataURL(file)
-
-            $(img).append($('<div/>', {
-                class: 'loader'
-            }))
-
-            fd = new FormData()
-            fd.append('image', file)
-
-            ((loader, image) ->
-                _palantir.open {
-                    url: root
-                    type: 'POST'
-                    data: fd
-                    xhr: ->
-                        xhr = $.ajaxSettings.xhr()
-                        xhr.upload.addEventListener 'progress',((e) ->
-                            prog = e.loaded/e.total*100
-                            loader.attr 'style', "top:#{ prog }%"), false
-                        $(xhr.upload).on 'load', (e) ->
-                            loader.attr 'style', "top:100%"
-                        return xhr
-                    contentType: false
-                    processData: false
-                    success: (data) ->
-                        $(image).attr('data-src', data.string_id)
-                        make_clickable image
-                }
-            )($(img).find('.loader'), image)
-
-    that.render = (data, offset) ->         
-        btn_more = controls.find('button.btn-more')
-        btn_more.off 'click'
-        btn_more.on 'click', (e) ->
-            e.preventDefault()
-
-            _palantir.open {
-                url: root + "?offset=#{ offset+20 }"
-                success: (data) ->
-                    that.render(data, offset+20)
-            }
-
-
-        if data.more == false
-            controls.find('button.btn-more').hide()
-
-        for img in data.data
-            wrapper = $('<div/>', {
-                class: 'image'
-            })
-            images.append wrapper
-
-            ((wrapper, addr, string_id) ->
-                _palantir.open {
-                    url: addr+'?base64=true&dimx=150&dimy=150'
-                    success: (data) ->
-                        image = new Image()
-                        image.src = 'data:image/jpeg;base64,'+data
-                        $(image).attr 'draggable', 'true'
-                        $(image).attr 'data-src', string_id
-
-                        $(image).on 'dragstart', (e) ->
-                            @.src = addr+'?dimx=400&dimy=400'
-
-                        wrapper.append image
-                        make_clickable image
-                }
-            )(wrapper, root+img.string_id, img.string_id)
-
-    make_clickable = (image) ->
-        $(image).on 'click', (e) ->
-            addr = root+$(image).attr('data-src')
-            modal = new Modal(__('Image details'))
-
-            modal.set_body($('<img/>', {
-                src: addr+'?dimx=558&dimy=558'
-                class: 'img-preview'
-            }))
-            modal.set_body($('<div/>', {
-                class: 'img-info'
-                html: $('<input/>', { 
-                    type: 'text'
-                    class: 'input input-xxlarge img-addr'
-                    value: addr+'?dimx=400&dimy=400' })
-            }))
-            input = $(modal.get()).find('.img-addr')
-            input.on 'click', (e) ->
-                e.preventDefault()
-                @select()
-
-            modal.show()
-
-    inheriter = _.partial init, imagelist, that, spec
-    _helpers = inheriter(helpers)
-    _palantir = inheriter(palantir)
-
-    return that
-
-cache = singleton((spec, that) ->
-    that = that ? {}
     timeout = spec.timeout ? 60
 
     # A cache object structure:
@@ -517,7 +459,7 @@ cache = singleton((spec, that) ->
     #   expires: int
     #   payload: Object
     # }
-    cache = {}
+    _cache = {}
     dirty = false
 
     has_timeout = (data) ->
@@ -528,11 +470,11 @@ cache = singleton((spec, that) ->
         return false
 
     that.get = (key) ->
-        if cache[key]
-            if has_timeout(cache[key])
+        if _cache[key]
+            if has_timeout(_cache[key])
                 that.delete(key)
-            else    
-                return cache[key].payload
+            else if _cache[key] != undefined
+                return _helpers.deep_copy(_cache[key].payload)
         return undefined
 
     that.set = (key, value, new_timeout=timeout) ->
@@ -540,25 +482,43 @@ cache = singleton((spec, that) ->
             expires: (new Date()).getTime()+1000*new_timeout
             payload: value
         }
-        cache[key] = payload
+        _cache[key] = payload
         dirty = true
 
         return key
 
     that.delete = (key) ->
-        delete cache[key]
+        delete _cache[key]
         return undefined
 
     that.genkey = (data) ->
         return data.type+data.url+JSON.stringify(data.data)
 
+    prune_old = (percent=20) ->
+        now = (new Date()).getTime()
+        keys = []
+
+        for key, value of _cache
+            keys.push({key: key, delta_t: value.expires-now})
+
+        keys = _.sortBy keys, (item) -> item.delta_t
+
+        for i in [0...(keys.length*percent/100)]
+            delete _cache[keys[i].key]
+
+    persist = ->
+        if dirty == true
+            try
+                localStorage['palantir_cache'] = JSON.stringify(_cache)
+                dirty = false
+            catch e
+                if e.name == 'QUOTA_EXCEEDED_ERR'
+                    prune_old()
+                    persist()
+
     # Periodiacally backup to the locaCache to provide
     # data persistence between reloads
-    backup_job = setInterval((() ->
-        if dirty == true
-            localStorage['palantir_cache'] = JSON.stringify(cache)
-            dirty = false
-    ), 1000)
+    backup_job = setInterval(persist, 1000)
 
     # Load from the localStorage and set up stuff
     setTimeout((() ->
@@ -567,20 +527,217 @@ cache = singleton((spec, that) ->
             return
 
         if localStorage['palantir_cache']?
-            cache = JSON.parse(localStorage['palantir_cache'])
+            _cache = JSON.parse(localStorage['palantir_cache'])
     ), 0)
 
     return that
 )
 
-palantir = singleton((spec, that) ->
+model = (spec, that) ->
     that = that ? {}
+
+    autosubmit = spec.autosubmit ? false
+
+    last = null
+    last_params = null
+    data_def = null
+    managed = []
+
+    created_models = (singleton ->
+        that = {}
+        models = []
+
+        that.add = (model) ->
+            models.push model
+
+        that.get = ->
+            return models
+        return that
+    )()
+
+    that.get = (callback, params, error) ->
+        last_params = params ? {}
+
+        that.keys -> 
+            p.open {
+                url: spec.url
+                data: params
+                success: (data) ->
+                    last = data.data[data.data.length-1][spec.id]
+
+                    ret = []
+                    for obj in data.data
+                        ret.push makeobj obj
+
+                    managed.push(ret)
+                    callback ret
+                error: error
+                palantir_timeout: 3600
+            }
+
+    that.more = (callback) ->
+        last_params['after'] = last
+        that.get callback, last_params
+
+    that.submit = (callback) ->
+        for el in (_.filter managed, (item) -> if item? then true else false)
+            if el.__dirty == true
+                el.__submit callback
+
+    that.submit_all = (callback) ->
+        for model in created_models.get()
+            model.submit callback
+
+    that.delete = (object, callback) ->
+        object.__delete callback
+
+    that._all_models = ->
+        return created_models.get()
+
+    that.new = (callback) ->
+        that.keys ->
+            new_def = _helpers.deep_copy(data_def)
+            for key, value of new_def
+                new_def[key] = undefined
+            ret = makeobj(new_def, true)
+
+            managed.push(ret)
+
+            callback ret
+
+    that.keys = (callback) ->
+        p.open {
+            url: spec.url + 'spec/'
+            success: (data) ->
+                data_def = normalize data.data
+                callback _.keys data.data
+        }
+
+    that.init = (params) ->
+        spec.id = params.id
+        spec.url = params.url
+        created_models.add that
+
+        return that
+
+    makeobj = (dict, dirty=false) ->
+        ret = {}
+        deleted = false
+
+        for prop, value of dict
+            if typeof value == 'object'
+                ret[prop] = value
+                continue
+
+            ((prop) ->
+                set_value = value
+                Object.defineProperty(ret, prop, {
+                    set: (new_value) ->
+                        if typeof new_value != data_def[prop] and
+                            (new_value != null and new_value != undefined)
+                                throw new TypeError()
+                        check_deletion(deleted)
+
+                        dirty = true
+                        set_value = new_value
+                    get: ->
+                        check_deletion(deleted)
+                        return set_value
+                })
+            )(prop)
+
+        Object.defineProperty(ret, '__dirty', {
+            get: -> dirty
+            set: (value) -> dirty = value
+        })
+
+        ret['__submit'] = (callback, force=false) ->
+            if ret.__dirty == false and not force
+                return
+            check_deletion(deleted)
+
+            that.keys ->
+                data = {}
+                for key, value of data_def
+                    data[key] = ret[key]
+
+                req_type = if ret.string_id? then 'PUT' else 'POST'
+                url = spec.url
+
+                if req_type == 'PUT'
+                    url += ret.string_id
+
+                p.open {
+                    url: url
+                    data: data
+                    type: req_type
+                    success: (data) ->
+                        for key, value of data.data
+                            ret[key] = value
+                        ret.__dirty = false
+
+                        callback()
+                    error: callback
+                }
+
+        ret['__delete'] = (callback) ->
+            check_deletion(deleted)
+
+            p.open {
+                url: spec.url + ret.string_id
+                type: 'DELETE'
+                success: (data) ->
+                    for el,i in managed
+                        if el == ret
+                            # Splice is not used for performance reasons
+                            managed[i] = undefined
+                            break
+
+                    ret = undefined
+                    deleted = true
+                    callback()
+                error: callback
+            }
+
+        return ret
+
+    check_deletion = (deleted) ->
+        if deleted == true
+            throw { 
+                type: 'DeletedError'
+                message: 'The object doesn\'t exist any more'
+            }
+
+
+    normalize = (data) ->
+        for key, value of data
+            if value == 'unicode' or value == 'str' or value == 'text'
+                data[key] = 'string'
+            if value == 'int' or value == 'decimal'
+                data[key] = 'number'
+
+        return data
+
+    inheriter = _.partial init, model, that, spec
+    p = inheriter palantir
+    _helpers = inheriter helpers
+
+    return that
+
+palantir = singleton((spec) ->
+    that = {}
+    if not spec?
+        spec = {}
     if spec[0]?
         spec = spec[0]
 
     _that = {}
-    _.extend _that, notifier(spec)
     _.extend _that, helpers(spec)
+
+    # TODO: Make it switchable by spec
+    connection_storage = stack()
+    running_requests = 0
+    max_requests = spec.max_requests ? 4
 
     routes = []
 
@@ -589,10 +746,33 @@ palantir = singleton((spec, that) ->
     else
         tout = spec.timeout ? 3600*24*2
 
-    base_url = spec.base_url ? url_root
+    base_url = spec.base_url ? (location.href.match /^.*\//)[0]
+    if base_url[base_url.length-1] != '/'
+        base_url += '/'
     spec.base_url = base_url
 
     wait_time = spec.wait_time ? 100
+
+    pop_storage = ->
+        if running_requests < max_requests
+            req = connection_storage.pop()
+            if req?
+                req()
+
+    request_finished = (fn) ->
+        () ->
+            running_requests -= 1
+            
+            pop_storage()
+            fn.apply(null, arguments)
+
+    wrap_request = (fn, data) ->
+        () ->
+            running_requests += 1
+            data.error = request_finished data.error
+            data.success = request_finished data.success
+
+            fn data
 
     cached_memoize = (fn, data, new_tout, caching=true) ->
         key = _cache.genkey(data)
@@ -604,10 +784,14 @@ palantir = singleton((spec, that) ->
             return data.success cached
 
         _cache.set(key, 'waiting', 15)
-        return fn data
+
+        return wrap_request(fn, data)()
 
     save_cache = (fn, cache_key, new_timeout) ->
-                    (data) ->
+                    (data, text_status, request) ->
+                        if request? and request.getResponseHeader?
+                            new_timeout = Date.parse(request.getResponseHeader('Expires'))
+
                         if not data.req_time?
                             if typeof data == 'string'
                                 _cache.set(cache_key, { data: data }, new_timeout)
@@ -623,9 +807,9 @@ palantir = singleton((spec, that) ->
                         if cached?
                             if cached != 'waiting'
                                 return fn_succ cached
-                            delete _cache.delete(cache_key)
+                            _cache.delete(cache_key)
 
-                        _that.notify data
+                        that.notifier.notify data
 
                         if fn_err?
                             fn_err data
@@ -644,14 +828,22 @@ palantir = singleton((spec, that) ->
             req_data.type = 'GET'
 
         key = _cache.genkey req_data
+        args = [$.ajax, req_data, req_data.tout, req_data.caching]
 
         req_data.error = on_error(req_data.success, req_data.error, key)
         if req_data.type == 'GET' and req_data.palantir_cache != false
             req_data.success = save_cache(req_data.success, key, 
                 req_data.palantir_timeout)
+            if running_requests >= max_requests
+                return connection_storage.push promise(cached_memoize, args,key)
+            else
+                return promise(cached_memoize, args, key)()
 
-        args = [$.ajax, req_data, req_data.tout, req_data.caching]
-        promise(cached_memoize, args, key)()
+        if running_requests >= max_requests    
+            return connection_storage.push wrap_request $.ajax, req_data
+
+        (wrap_request $.ajax, req_data)()
+
 
     that.template = (name, where, object={}) ->
         that.open {
@@ -663,6 +855,21 @@ palantir = singleton((spec, that) ->
                 _template.bind where
             palantir_timeout: tout
         }
+
+    that.extend_renderers = (extensions) ->
+        _template.extend_renderers(extensions)
+
+    that.extend_code_messages = (data) ->
+        if not that.notifier?
+            return
+
+        that.notifier.extend_code_messages data
+
+    that.extend_messages = (data) ->
+        if not that.notifier?
+            return
+
+        that.notifier.extend_messages data
     
     that.route = (route, fn) ->
         routes.push({route: route, fn: fn})
@@ -670,13 +877,16 @@ palantir = singleton((spec, that) ->
         () ->
             fn.apply(null, arguments)
 
-    that.goto = (route, target) ->
+    that.goto = (route, params...) ->
         matching = _.where(routes, {route: route})
         if matching.length > 0
-            matching[0].fn(target)
+            matching[0].fn.apply(null, params)
 
     # Constructor
     setTimeout((() ->
+        that.extend_code_messages spec.code_messages
+        that.extend_messages spec.messages
+
         $(window).on 'hashchange', (e) ->
             e.preventDefault()
             e.stopPropagation()
@@ -684,11 +894,29 @@ palantir = singleton((spec, that) ->
             res = _.where(routes, {route: window.location.hash.slice(1)})
             if res.length > 0
                 res[0].fn()
+
+        $('body').on 'click', 'a[data-route]', (e) ->
+            e.preventDefault()
+            that.goto($(e.target).attr('data-route'), e.target)
     ), 0)
 
     inheriter = _.partial init, palantir, that, spec
     _template = inheriter(template)
     _cache = inheriter(cache)
 
+    that.notifier = inheriter notifier
+    that.helpers = inheriter helpers
+    that.gettext = inheriter gettext
+    that.model = inheriter model
+
     return that
 )
+
+MissingParam = (message) ->
+    @name = 'MissingParam'
+    @message = message ? 'A parameter is missing'
+
+# Exports to global scope
+window.palantir = palantir
+window.singleton = singleton
+window.init = init

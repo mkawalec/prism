@@ -17,4 +17,5 @@ letter = (spec, that) ->
 
     return that
 
-open_letter = letter({ base_url: 'http://localhost:8000/'})
+open_letter = letter()
+
