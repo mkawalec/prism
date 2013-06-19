@@ -7,6 +7,8 @@
     float: left;
     margin-left: 0px;
     margin-top: 20px;
+
+    font:14px/1.5 Lato, "Helvetica Neue", Helvetica, Arial, sans-serif !important;
 }
 
 #header {
@@ -27,4 +29,15 @@
 .mpolska {
     margin-right: 0px !important;
     margin-top: 30px;
+}
+
+.signed-by {
+    margin-top: 40px;
+    float: left;
+}
+
+.signed-by b {
+    width: 100%;
+    float: left;
+    margin-bottom: 10px;
 }
