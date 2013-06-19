@@ -5,7 +5,6 @@ letter = (spec, that) ->
     create = p.route('init', () ->
         p.template('header.html', $('#header'))
         p.template('body.html', $('#body'), that)
-        p.template('footer.html', $('#footer'))
     )
 
     # Constructor
