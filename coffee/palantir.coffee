@@ -789,7 +789,7 @@ palantir = singleton((spec) ->
 
     save_cache = (fn, cache_key, new_timeout) ->
                     (data, text_status, request) ->
-                        if request? and request.getResponseHeader?
+                        if request? and request.getResponseHeader? and spec.expires != false
                             new_timeout = Date.parse(request.getResponseHeader('Expires'))
 
                         if not data.req_time?
