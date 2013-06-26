@@ -49,6 +49,14 @@ class SignaturesView(FlaskView):
         after = request.args.get('after')
         after = after if after else 'empty'
 
+        limit = request.args.get('limit')
+        try:
+            limit = int(limit)
+            if limit > 300:
+                limit = 300
+        except (ValueError, TypeError):
+            limit = 300
+
         rv = g.redis.get(key_prefix+after)
         if not rv:
             signatures = db_session.query(Signature).\
@@ -63,7 +71,7 @@ class SignaturesView(FlaskView):
                         filter(Signature.id > stmt.c.id)
             signatures = signatures.\
                 order_by(desc(Signature.timestamp)).\
-                limit(300).all()
+                limit(limit).all()
             amount = int(db_session.query(Signature).\
                     filter(Signature.confirmed == True).\
                     count())
