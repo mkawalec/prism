@@ -653,7 +653,7 @@ model = (spec, that) ->
         }
 
     that.init = (params) ->
-        spec.id = params.id
+        spec.id = params.id ? 'string_id'
         spec.url = params.url
         created_models.add that
 
