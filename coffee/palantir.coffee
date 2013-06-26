@@ -106,6 +106,45 @@ helpers = singleton((spec) ->
 
         return obj
 
+    # TODO: Deal with parameter arrays ie. 
+    # pull ?arr[]=first&arr[]=second into
+    # arr = ['first', 'second']
+    that.pull_params = (route) ->
+        addr = route.split('?')[0]
+        params = {}
+
+        if route.split('?').length > 1
+            raw_params = route.split('?')[1].split('&')
+            for param in raw_params
+                params[decodeURIComponent(param.split('=')[0])] = \
+                    decodeURIComponent(param.split('=')[1])
+
+        return [addr, params]
+
+    that.add_params = (route, params) ->
+        if Object.prototype.toString.call(params) == '[object Array]' \
+            and params.length == 1 and typeof params[0] == 'object'
+                params = params[0]
+
+        if Object.prototype.toString.call(params) == '[object Array]'
+            for param,i in params
+                if i == 0 and '?' not in route
+                    route += '?'
+                else
+                    route += '&'
+                route += 'param'+i+'='+encodeURIComponent(param)
+        else if typeof params == 'object'
+            i = 0
+            for key, value of params
+                if i == 0 and '?' not in route
+                    route += '?'
+                else
+                    route += '&'
+                route += "#{ encodeURIComponent(key) }=#{ encodeURIComponent(value) }"
+                i += 1
+
+        return route
+
     that.delay = (fn) ->
         setTimeout(fn, 0)
 
@@ -744,9 +783,16 @@ palantir = singleton((spec) ->
     if spec.debug
         tout = 0
     else
-        tout = spec.timeout ? 3600*2
+        tout = spec.timeout ? 3600*24*2
 
-    base_url = spec.base_url ? (location.href.match /^.*\//)[0]
+    # Magic generating the base url for the app
+    base_url = spec.base_url ? (location.href.match /^.*\//)
+    if Object.prototype.toString.call(base_url) == '[object Array]'
+        if base_url.length == 0
+            base_url = location.href
+        else
+            base_url = base_url[0]
+
     if base_url[base_url.length-1] != '/'
         base_url += '/'
     spec.base_url = base_url
@@ -878,26 +924,40 @@ palantir = singleton((spec) ->
             fn.apply(null, arguments)
 
     that.goto = (route, params...) ->
-        matching = _.where(routes, {route: route})
-        if matching.length > 0
-            matching[0].fn.apply(null, params)
+        route = '#'+that.helpers.add_params route, params
+        window.location.hash = route
+
+        ((routes) ->
+            hashchange()
+        )(routes)
+        
+    hashchange = (e) ->
+        e?.preventDefault()
+        e?.stopPropagation()
+
+        [route, params] = that.helpers.\
+            pull_params location.hash.slice(1)
+        res = _.where(routes, {route: route})
+
+        for matching in res
+            matching.fn(params)
 
     # Constructor
     setTimeout((() ->
         that.extend_code_messages spec.code_messages
         that.extend_messages spec.messages
 
+        # So that only the latest instance of palantir
+        # is in charge of events. Chaos is not appreciated
+        $(window).off 'hashchange'
         $(window).on 'hashchange', (e) ->
-            e.preventDefault()
-            e.stopPropagation()
-
-            res = _.where(routes, {route: window.location.hash.slice(1)})
-            if res.length > 0
-                res[0].fn()
+            ((routes) ->
+                hashchange(e)
+            )(routes)
 
         $('body').on 'click', 'a[data-route]', (e) ->
             e.preventDefault()
-            that.goto($(e.target).attr('data-route'), e.target)
+            that.goto($(e.target).attr('data-route'), {target: $(e.target).attr 'id'})
     ), 0)
 
     inheriter = _.partial init, palantir, that, spec
