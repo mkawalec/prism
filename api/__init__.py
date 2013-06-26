@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 from sqlalchemy.orm.exc import NoResultFound
 
-from flask.ext.classy import FlaskView
+from flask.ext.classy import FlaskView, route
    
 app = Flask(__name__)
 app.config.from_object('api.configs.default')
@@ -17,6 +17,10 @@ app.config.from_object('api.configs.default')
 from .models import Signature, ConfCode
 from .database import db_session
 from .helpers import stringify_class, class_spec
+
+from crossdomain import crossdomain
+
+import pickle
 
 @app.route('/')
 def home():
@@ -44,6 +48,7 @@ def confirm(code_id):
 
 class SignaturesView(FlaskView):
 
+    @crossdomain(origin='*')
     def index(self):
         key_prefix = 'signatures-'
         after = request.args.get('after')
@@ -77,9 +82,13 @@ class SignaturesView(FlaskView):
                     count())
 
             rv = dict(signatures=signatures, amount=amount)
-            g.redis.setex(key_prefix+after, rv, 60)
+            g.redis.setex(key_prefix+after, pickle.dumps(rv), 60)
+        else:
+            rv = pickle.loads(rv)
         return jsonify(stringify_class(rv))
 
+    @crossdomain(origin='*')
+    @route('/<id>')
     def get(self, id):
         try:
             signature = db_session.query(Signature).\
@@ -90,6 +99,7 @@ class SignaturesView(FlaskView):
             abort(404)
         return jsonify(stringify_class(rv))
 
+    @crossdomain(origin='*')
     def post(self):
         f = request.form
         if 'name' not in f or 'email' not in f:
@@ -102,8 +112,9 @@ class SignaturesView(FlaskView):
         sig.codes.append(Code())
         db_session.commit()
 
+    @crossdomain(origin='*')
     def spec(self):
         sig = Signature('test', 'test', 'test')
-        return jsonify(class_spec(sig))
+        return jsonify(data=class_spec(sig))
 
 SignaturesView.register(app)
