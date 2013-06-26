@@ -67,7 +67,7 @@ class SignaturesView(FlaskView):
             signatures = db_session.query(Signature).\
                     filter(Signature.confirmed == True)
 
-            if after:
+            if after != 'empty':
                 stmt = db_session.query(Signature.id).\
                     filter(Signature.string_id == after).\
                     subquery()
