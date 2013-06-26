@@ -594,7 +594,7 @@ model = (spec, that) ->
         return that
     )()
 
-    that.get = (callback, params, error) ->
+    that.get = (params, callback, error_callback) ->
         last_params = params ? {}
 
         that.keys -> 
@@ -610,7 +610,7 @@ model = (spec, that) ->
 
                     managed.push(ret)
                     callback ret
-                error: error
+                error: error_callback
                 palantir_timeout: 3600
             }
 
@@ -655,6 +655,9 @@ model = (spec, that) ->
     that.init = (params) ->
         spec.id = params.id ? 'string_id'
         spec.url = params.url
+        if spec.url[spec.url.length-1] != '/'
+            spec.url += '/'
+
         created_models.add that
 
         return that
