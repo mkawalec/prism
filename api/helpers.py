@@ -52,3 +52,13 @@ def stringify_class(obj, one=None):
                 ret[el] = obj.__dict__[el]
 
     return ret
+
+def class_spec(instance, restricted=[]):
+    restricted = ['id', 'disabled']
+
+    ret = {}
+    for key in instance.__dict__:
+        if key not in restricted and key[0] != '_':
+            ret[key] = instance.__dict__[key].__class__.__name__
+
+    return ret

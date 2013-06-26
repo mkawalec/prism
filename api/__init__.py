@@ -15,7 +15,7 @@ app.config.from_object('api.configs.default')
 
 from .models import Signature, ConfCode
 from .database import db_session
-from .helpers import stringify_class
+from .helpers import stringify_class, class_spec
 
 @app.route('/')
 def home():
@@ -82,5 +82,9 @@ class SignaturesView(FlaskView):
 
         sig.codes.append(Code())
         db_session.commit()
+
+    def spec(self):
+        sig = Signature('test', 'test')
+        return jsonify(class_spec(sig))
 
 SignaturesView.register(app)
