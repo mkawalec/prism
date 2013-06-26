@@ -4,6 +4,7 @@ from flask import (Flask, request, redirect, url_for, abort,
 
 from datetime import timedelta, datetime
 
+from sqlalchemy import desc
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 from sqlalchemy.orm.exc import NoResultFound
@@ -44,21 +45,31 @@ def confirm(code_id):
 class SignaturesView(FlaskView):
 
     def index(self):
-        offset = request.args.get('offset')
-        if not offset or offset < 0:
-            offset = 0
+        key_prefix = 'signatures-'
+        after = request.args.get('after')
+        after = after if after else 'empty'
 
-        rv = g.redis.get('signatures'+str(offset))
+        rv = g.redis.get(key_prefix+after)
         if not rv:
             signatures = db_session.query(Signature).\
-                    filter(Signature.confirmed == True).\
-                    offset(offset).limit(300).all()
+                    filter(Signature.confirmed == True)
+
+            if after:
+                stmt = db_session.query(Signature.id).\
+                    filter(Signature.string_id == after).\
+                    subquery()
+
+                signatures = signatures.\
+                        filter(Signature.id > stmt.c.id)
+            signatures = signatures.\
+                order_by(desc(Signature.timestamp)).\
+                limit(300).all()
             amount = int(db_session.query(Signature).\
                     filter(Signature.confirmed == True).\
                     count())
 
             rv = dict(signatures=signatures, amount=amount)
-            g.redis.setex('signatures'+str(offset), rv, 60)
+            g.redis.setex(key_prefix+after, rv, 60)
         return jsonify(stringify_class(rv))
 
     def get(self, id):
@@ -84,7 +95,7 @@ class SignaturesView(FlaskView):
         db_session.commit()
 
     def spec(self):
-        sig = Signature('test', 'test')
+        sig = Signature('test', 'test', 'test')
         return jsonify(class_spec(sig))
 
 SignaturesView.register(app)

@@ -28,7 +28,7 @@ def stringify_class(obj, one=None):
         for el in obj:
             ret.append(stringify_class(el))
     elif isinstance(obj, str) or isinstance(obj, unicode) or\
-            isinstance(obj, long):
+            isinstance(obj, int) or isinstance(obj, long):
         ret = obj
 
     else:
