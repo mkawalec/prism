@@ -20,7 +20,7 @@ def gen_filename(chars=12):
     return ''.join(random.sample(CHARS, chars))
 
 def stringify_class(obj, one=None):
-    restricted = ['id', 'disabled', 'added_quota']
+    restricted = ['id', 'disabled']
     if isinstance(obj, dict):
         ret = {}
         for el in obj:

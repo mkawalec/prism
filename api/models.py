@@ -44,6 +44,8 @@ class Signature(Boilerplate, Base):
     confirmed = Column(Boolean)
 
     def __init__(self, name, email, comment=None):
+        super(Signature, self).__init__()
+
         self.name = name
         self.email = email
         self.comment = comment
