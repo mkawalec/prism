@@ -160,6 +160,8 @@ gettext = singleton((spec, that) ->
     default_lang = spec.default_lang ? 'en'
 
     translations_url = spec.translations_url ? "#{ spec.base_url }translations/"
+    if translations_url.indexOf('://') == -1
+        translations_url = spec.base_url + translations_url
 
     translations = {}
 
@@ -551,7 +553,7 @@ cache = singleton((spec) ->
                 localStorage['palantir_cache'] = JSON.stringify(_cache)
                 dirty = false
             catch e
-                if e.name == 'QUOTA_EXCEEDED_ERR'
+                if e.name == 'QuotaExceededError'
                     prune_old()
                     persist()
 
@@ -577,10 +579,13 @@ model = (spec, that) ->
 
     autosubmit = spec.autosubmit ? false
 
-    last = null
     last_params = null
     data_def = null
     managed = []
+
+    # Subsequent ids when called with more
+    steps = []
+    step_index = -1
 
     created_models = (singleton ->
         that = {}
@@ -594,29 +599,61 @@ model = (spec, that) ->
         return that
     )()
 
-    that.get = (params, callback, error_callback) ->
-        last_params = params ? {}
+    that.get = (callback, params, error_callback) ->
+        params = params ? {}
+
+        url = spec.url
+        if params.id?
+            url += params.id
+            delete params.id
 
         that.keys -> 
             p.open {
-                url: spec.url
+                url: url
                 data: params
                 success: (data) ->
-                    last = data.data[data.data.length-1][spec.id]
-
                     ret = []
-                    for obj in data.data
-                        ret.push makeobj obj
+                    if Object.prototype.toString.call(data.data) == '[object Array]'
+                        for obj in data.data
+                            ret.push makeobj obj
+                    else
+                        ret.push makeobj data.data
 
-                    managed.push(ret)
-                    callback ret
+                    managed.concat(ret)
+                    callback ret, {more: data.more, less: data.less}
                 error: error_callback
                 palantir_timeout: 3600
             }
 
-    that.more = (callback) ->
-        last_params['after'] = last
-        that.get callback, last_params
+    that.more = (callback, params) ->
+        params = params ? last_params
+        if step_index > -1
+            params.after = steps[step_index]
+        else if params.after?
+            delete params.after
+
+        saver = ->
+            if step_index+1 == steps.length
+                steps.push ret[ret.length-1][spec.id]
+            step_index += 1
+
+            callback arguments
+
+        that.get saver, last_params
+
+    that.less = (callback, params) ->
+        params = params ? {}
+
+        if step_index < 1 and params.after?
+            delete params.after
+        else if step_index > 0
+            params.after = steps[step_index-2]
+
+        saver = ->
+            step_index -= 1
+            callback arguments
+
+        that.get saver, params
 
     that.submit = (callback) ->
         for el in (_.filter managed, (item) -> if item? then true else false)
@@ -655,6 +692,9 @@ model = (spec, that) ->
     that.init = (params) ->
         spec.id = params.id ? 'string_id'
         spec.url = params.url
+
+        if spec.url.indexOf('://') == -1
+            spec.url = spec.base_url + spec.url
         if spec.url[spec.url.length-1] != '/'
             spec.url += '/'
 
@@ -957,6 +997,8 @@ palantir = singleton((spec) ->
             ((routes) ->
                 hashchange(e)
             )(routes)
+
+        hashchange()
 
         $('body').on 'click', 'a[data-route]', (e) ->
             e.preventDefault()
