@@ -202,14 +202,14 @@ notifier = (spec, that) ->
 
     placeholder = $('#alerts')
 
-    that.notify = (req_data) ->
+    that.notify = (req_data, new_placeholder) ->
         if not messages.get_message(req_data)?
             if messages.get_code_message(req_data.status)?
                 show_message(messages.get_code_message, req_data.status)
                 return
             return
 
-        show_message(messages.get_message, req_data)
+        show_message(messages.get_message, req_data, new_placeholder)
 
     that.extend_code_messages = (data) ->
         messages.extend_code_messages data
@@ -217,7 +217,7 @@ notifier = (spec, that) ->
     that.extend_messages = (data) ->
         messages.extend_messages data
           
-    show_message = (fn, key) ->
+    show_message = (fn, key, new_placeholder=placeholder) ->
         alert = $('<div/>', {
             class: "alert alert-#{ fn(key).type }"
         })
@@ -241,7 +241,9 @@ notifier = (spec, that) ->
         alert.append message_wrapper
         alert.hide()
 
-        placeholder.append alert
+        new_placeholder.append alert
+
+        $('html, body').animate {scrollTop: alert.offset().top}
         alert.show 'slide'
 
     inheriter = _.partial init, notifier, that, spec
@@ -750,7 +752,13 @@ model = (spec, that) ->
                         ret = makeobj data.data
 
                     managed.concat(ret)
-                    callback ret, {more: data.more, less: data.less}
+
+                    other_params = {}
+                    for key,value of data
+                        if key != 'data'
+                            other_params[key] = value
+
+                    callback ret, other_params
                 error: error_callback
                 palantir_timeout: 300
             }
@@ -845,9 +853,6 @@ model = (spec, that) ->
                 set_value = value
                 Object.defineProperty(ret, prop, {
                     set: (new_value) ->
-                        if typeof new_value != data_def[prop] and
-                            (new_value != null and new_value != undefined)
-                                throw new TypeError()
                         check_deletion(deleted)
 
                         dirty = true
