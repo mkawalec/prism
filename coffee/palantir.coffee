@@ -21,9 +21,6 @@ stack = ->
 
         return item
 
-    that.empty = ->
-        if store.length == 0 then return true else return false
-
     return that
 
 init = (initiator, public_initiator, spec, inherited) ->
@@ -45,6 +42,7 @@ init = (initiator, public_initiator, spec, inherited) ->
     if inherited.prototype.call_ids?
         if (_.intersection initiator.prototype.callers, inherited.prototype.call_ids).length > 0
             return inherited.prototype.call_that
+
     return inherited spec
 
 singleton = (fn) ->
@@ -157,6 +155,7 @@ gettext = singleton((spec, that) ->
     that = that ? {}
 
     lang = spec.lang ? ($('html').attr('lang') ? 'en')
+    lang = if lang.length == 0 then 'en' else lang
     default_lang = spec.default_lang ? 'en'
 
     translations_url = spec.translations_url ? "#{ spec.base_url }translations/"
@@ -533,7 +532,16 @@ cache = singleton((spec) ->
         return undefined
 
     that.genkey = (data) ->
-        return data.type+data.url+JSON.stringify(data.data)
+        to_join = ["type:#{ data.type }", "url:#{ data.url }",
+            "data: #{ JSON.stringify(data.data) }"]
+        return to_join.join ';'
+
+    that.delall = (url) ->
+        searched = "url:#{ url }"
+        for key,value of _cache
+            if key.indexOf(searched) != -1
+                dirty = true
+                delete _cache[key]
 
     prune_old = (percent=20) ->
         now = (new Date()).getTime()
@@ -574,6 +582,128 @@ cache = singleton((spec) ->
     return that
 )
 
+validators = (spec, that) ->
+    that = that ? {}
+    _helpers = helpers spec
+    managed = []
+
+    validators_db = (singleton ->
+        _that = {}
+        _validators = {}
+
+        _that.apply = (validator, params) ->
+            if _validators[validator] == undefined
+                return undefined
+            return _validators[validator].apply null, params
+
+        _that.extend = (to_extend) ->
+            _.extend _validators, to_extend
+
+        _that.get = ->
+            return _validators
+        return _that
+    )()
+
+    that.discover = (where) ->
+        if not where?
+            where = spec.placeholder
+
+        for form in where.find('.form')
+            form = $(form)
+            form.attr 'data-validation_id', _helpers.random_string()
+            managed.push form
+
+            form.on 'submit', (e) ->
+                console.log e
+            form.on 'click', "[data-submit='true']", (e) ->
+                console.log e
+
+    that.init = that.discover
+
+    that.extend = (to_extend) ->
+        validators_db.extend to_extend
+
+    that.test = ->
+        errors = {}
+        for form in managed
+            errors[form.attr('data-validation_id')] = test form
+        return errors
+
+    inheriter = _.partial init, validators, that, spec
+    p = inheriter palantir
+    __ = p.gettext.gettext
+
+    parse_validators = (field) ->
+        to_parse = $(field).attr('data-validators')
+        parsed = []
+
+        for validator in to_parse.split(';')
+            split = validator.split('(')
+            name = $.trim split[0]
+
+            # The dictionary on position 1 holds named params
+            ret_params = [field, {}]
+
+            if split.length > 1
+                split[1] = $.trim split[1]
+                params = split[1].slice(0, split[1].length-1)
+                for param in params.split(',')
+                    param = ($.trim(param)).split('=')
+                    if param.length > 1
+                        tmp = {}
+                        tmp[param[0]] = param[1]
+                        _.extend ret_params[1], tmp
+                    else
+                        ret_params.push(param[0])
+
+            parsed.push [name, ret_params]
+            
+
+        return parsed
+
+    test = (where) ->
+        errors = []
+        for field in where.find("[data-validators]")
+            for validator in parse_validators(field)
+                err = validators_db.apply validator[0], validator[1]
+                if err? and err.length > 0
+                    errors.push {
+                        field: field
+                        errors: err
+                    }
+
+        return errors
+
+    that.extend({
+        length: (object, kwargs, args...) ->
+            kwargs.min = kwargs.min ? (args[0] ? 0)
+            kwargs.max = kwargs.max ? (args[1] ? Number.MAX_VALUE)
+            errors = []
+
+            length = $.trim(object.value).length
+            if length < kwargs.min
+                errors.push(__("The input of length #{ length } you entered"+\
+                    " is too short. The minimum length is #{ kwargs.min }"))
+            if length > kwargs.max
+                errors.push(__("The input of length #{ length } you entered"+\
+                    " is too long. The maximum length is #{ kwargs.max }"))
+            return errors
+
+        email: (object, kwargs, args...) ->
+            regex = kwargs.regex if kwargs.regex? else \
+                /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,4}$/
+            if not $.trim(object.value).match regex
+                return [__('The email you entered is incorrect')]
+            return null
+
+        required: (object) ->
+            if $.trim(object.value).length == 0
+                return [__('This field is obligatory')]
+            return null
+    })
+
+    return that
+        
 model = (spec, that) ->
     that = that ? {}
 
@@ -588,15 +718,15 @@ model = (spec, that) ->
     step_index = -1
 
     created_models = (singleton ->
-        that = {}
-        models = []
+        _that = {}
+        _models = []
 
-        that.add = (model) ->
-            models.push model
+        _that.add = (new_model) ->
+            _models.push new_model
 
-        that.get = ->
-            return models
-        return that
+        _that.get = ->
+            return _models
+        return _that
     )()
 
     that.get = (callback, params, error_callback) ->
@@ -617,12 +747,12 @@ model = (spec, that) ->
                         for obj in data.data
                             ret.push makeobj obj
                     else
-                        ret.push makeobj data.data
+                        ret = makeobj data.data
 
                     managed.concat(ret)
                     callback ret, {more: data.more, less: data.less}
                 error: error_callback
-                palantir_timeout: 3600
+                palantir_timeout: 300
             }
 
     that.more = (callback, params) ->
@@ -700,7 +830,7 @@ model = (spec, that) ->
 
         created_models.add that
 
-        return that
+        return model spec
 
     makeobj = (dict, dirty=false) ->
         ret = {}
@@ -821,6 +951,8 @@ palantir = singleton((spec) ->
     running_requests = 0
     max_requests = spec.max_requests ? 4
 
+    spec.placeholder = spec.placeholder ? $('body')
+
     routes = []
 
     if spec.debug
@@ -931,6 +1063,9 @@ palantir = singleton((spec) ->
         if running_requests >= max_requests    
             return connection_storage.push wrap_request $.ajax, req_data
 
+        if req_data.type != 'GET'
+            _cache.delall req_data.url
+
         (wrap_request $.ajax, req_data)()
 
 
@@ -990,9 +1125,6 @@ palantir = singleton((spec) ->
         that.extend_code_messages spec.code_messages
         that.extend_messages spec.messages
 
-        # So that only the latest instance of palantir
-        # is in charge of events. Chaos is not appreciated
-        $(window).off 'hashchange'
         $(window).on 'hashchange', (e) ->
             ((routes) ->
                 hashchange(e)
@@ -1012,14 +1144,11 @@ palantir = singleton((spec) ->
     that.notifier = inheriter notifier
     that.helpers = inheriter helpers
     that.gettext = inheriter gettext
+    that.validators = inheriter validators
     that.model = inheriter model
 
     return that
 )
-
-MissingParam = (message) ->
-    @name = 'MissingParam'
-    @message = message ? 'A parameter is missing'
 
 # Exports to global scope
 window.palantir = palantir
