@@ -27,10 +27,11 @@ def home():
     return '42'
 
 @app.route('/confirm/<code_id>', methods=['POST'])
+@crossdomain(origin='*')
 def confirm(code_id):
     try:
         code = db_session.query(ConfCode).\
-                option(joinedload(ConfCode.signature)).\
+                options(joinedload(ConfCode.signature)).\
                 filter(ConfCode.string_id == code_id).\
                 one()
     except NoResultFound:
@@ -81,7 +82,7 @@ class SignaturesView(FlaskView):
                     filter(Signature.confirmed == True).\
                     count())
 
-            rv = dict(signatures=signatures, amount=amount)
+            rv = dict(data=signatures, amount=amount)
             g.redis.setex(key_prefix+after, pickle.dumps(rv), 60)
         else:
             rv = pickle.loads(rv)
@@ -107,10 +108,17 @@ class SignaturesView(FlaskView):
 
         sig = Signature(f['name'], f['email'], f['comment'])
         db_session.add(sig)
-        db_session.flush()
+        try:
+            db_session.flush()
+        except IntegrityError:
+            db_session.rollback()
+            abort(403)
 
-        sig.codes.append(Code())
+        sig.codes.append(ConfCode())
         db_session.commit()
+
+        sig.string_id
+        return jsonify(data=stringify_class(sig))
 
     @crossdomain(origin='*')
     def spec(self):
