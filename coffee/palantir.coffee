@@ -1,8 +1,11 @@
-##############################
-##                          ##
-## Ten kod dedykuję Ewci <3 ##
-##                          ##
-##############################
+######################################
+##                                  ##
+## Copyright Michal Kawalec, 2013   ##
+##                                  ##
+##                                  ##
+## Ten kod dedykuję Ewci <3         ##
+##                                  ##
+######################################
 
 stack = ->
     that = {}
@@ -158,7 +161,8 @@ gettext = singleton((spec, that) ->
     lang = if lang.length == 0 then 'en' else lang
     default_lang = spec.default_lang ? 'en'
 
-    translations_url = spec.translations_url ? "#{ spec.base_url }translations/"
+    static_prefix = spec.static_prefix ? ''
+    translations_url = spec.translations_url ? "#{ spec.base_url+static_prefix }translations/"
     if translations_url.indexOf('://') == -1
         translations_url = spec.base_url + translations_url
 
@@ -202,14 +206,14 @@ notifier = (spec, that) ->
 
     placeholder = $('#alerts')
 
-    that.notify = (req_data, new_placeholder) ->
+    that.notify = (req_data) ->
         if not messages.get_message(req_data)?
             if messages.get_code_message(req_data.status)?
                 show_message(messages.get_code_message, req_data.status)
                 return
             return
 
-        show_message(messages.get_message, req_data, new_placeholder)
+        show_message(messages.get_message, req_data)
 
     that.extend_code_messages = (data) ->
         messages.extend_code_messages data
@@ -217,7 +221,7 @@ notifier = (spec, that) ->
     that.extend_messages = (data) ->
         messages.extend_messages data
           
-    show_message = (fn, key, new_placeholder=placeholder) ->
+    show_message = (fn, key) ->
         alert = $('<div/>', {
             class: "alert alert-#{ fn(key).type }"
         })
@@ -241,9 +245,7 @@ notifier = (spec, that) ->
         alert.append message_wrapper
         alert.hide()
 
-        new_placeholder.append alert
-
-        $('html, body').animate {scrollTop: alert.offset().top}
+        placeholder.append alert
         alert.show 'slide'
 
     inheriter = _.partial init, notifier, that, spec
@@ -298,6 +300,11 @@ template = (spec, that) ->
 
     _libs = {}
     _.extend _libs, helpers(spec)
+
+    static_prefix = spec.static_prefix ? ''
+    template_url = spec.template_url ? "#{ spec.base_url+static_prefix }templates/"
+    if template_url.indexOf('://') == -1
+        template_url = spec.base_url + template_url
 
     translate = (_, text) ->
         return __ $.trim text
@@ -356,7 +363,10 @@ template = (spec, that) ->
         for element in where.find('[data-click]')
             $(element).on 'click', (e) ->
                 e.preventDefault()
-                _libs.goto $(@).attr('data-click'), @
+                _libs.goto $(@).attr('data-click'), {
+                    silent: true
+                    string_id: string_id
+                }
 
         for element in $(where).find('[data-source]')
             ((element) ->
@@ -365,10 +375,9 @@ template = (spec, that) ->
                 that.set_details element, null, actions
             )(element)
 
-        for element in $(where).find('[data-wysiwyg]')
-            if $(element).attr('data-wysiwyg') == 'true'
-                editor = new nicEditor()
-                editor.panelInstance $(element).attr('id')
+        for element in $(where).find("[data-wysiwyg='true']")
+            editor = new nicEditor()
+            editor.panelInstance $(element).attr('id')
 
     that.set_details = (element, caching=true, actions) ->
         _libs.open {
@@ -383,17 +392,17 @@ template = (spec, that) ->
 
                 data_tag = $(element).attr('data-tag')
                 if data_tag?
-                    if tag_renderers[data_tag]?
-                        tag_renderers[data_tag] element, data
-                    else tag_renderers.div element, data
+                    if tag_renderers.get(data_tag)?
+                        tag_renderers.get(data_tag) element, data
+                    else tag_renderers.get('div') element, data
                 else
                     if not element.tagName?
-                        tag_renderers.div element, data, contents
+                        tag_renderers.get('div') element, data, contents
                     else
                         tag_name = element.tagName.lower()
-                        if tag_renderers[tag_name]?
-                            tag_renderers[tag_name] element, data
-                        else tag_renderers.div element, data
+                        if tag_renderers.get(tag_name)?
+                            tag_renderers.get(tag_name) element, data
+                        else tag_renderers.get('div') element, data
 
                 if actions? and actions.add
                     _libs.open {
@@ -403,52 +412,63 @@ template = (spec, that) ->
                     }
         }
 
-    tag_renderers = {
-        select: (element, data) ->
-            for el in data.data
-                $(element).append($("<option/>", {
-                    value: el.string_id
-                    text: el[$(element).attr('data-shown_property')]
-                }))
+    tag_renderers = (singleton ->
+        _that = {}
 
-        div: (element, data, contents) ->
-            for el in data.data
-                if el.string_id == contents
-                    $(element).html el[$(element).attr('data-binding')]
-                    break
+        _renderers = {
+            select: (element, data) ->
+                for el in data.data
+                    $(element).append($("<option/>", {
+                        value: el.string_id
+                        text: el[$(element).attr('data-shown_property')]
+                    }))
 
-        checklist: (element, data) ->
-            element = _helpers.clone(element)
+            div: (element, data, contents) ->
+                for el in data.data
+                    if el.string_id == contents
+                        $(element).html el[$(element).attr('data-binding')]
+                        break
 
-            $(element).on 'change', 'input', (e) ->
-                selected = []
-                for el in $(e.delegateTarget).\
-                    find("input[type='checkbox']:checked")
-                        selected.push(el.value)
+            checklist: (element, data) ->
+                element = _helpers.clone(element)
 
-                $(e.delegateTarget).\
-                    attr('data-value', JSON.stringify(selected))
+                $(element).on 'change', 'input', (e) ->
+                    selected = []
+                    for el in $(e.delegateTarget).\
+                        find("input[type='checkbox']:checked")
+                            selected.push(el.value)
 
-            # For all elements
-            for el in data.data
-                id = _libs.random_string()
+                    $(e.delegateTarget).\
+                        attr('data-value', JSON.stringify(selected))
 
-                checkbox_group = $('<div/>', {
-                    class: 'checkbox-group'
-                })
-                blah = checkbox_group.append($("<input/>", {
-                    type: 'checkbox'
-                    value: el.string_id
-                    id: id
-                }))
-                checkbox_group.append($('<label/>', {
-                    for: id
-                    text: el[$(element).attr('data-shown_property')]
-                }))
+                # For all elements
+                for el in data.data
+                    id = _libs.random_string()
 
-                element.append(checkbox_group)
-    }
-    _.extend tag_renderers, spec.tag_renderers
+                    checkbox_group = $('<div/>', {
+                        class: 'checkbox-group'
+                    })
+                    blah = checkbox_group.append($("<input/>", {
+                        type: 'checkbox'
+                        value: el.string_id
+                        id: id
+                    }))
+                    checkbox_group.append($('<label/>', {
+                        for: id
+                        text: el[$(element).attr('data-shown_property')]
+                    }))
+
+                    element.append(checkbox_group)
+        }
+
+        _that.get = (renderer) ->
+            return _renderers[renderer]
+
+        _that.extend = (to_extend) ->
+            _.extend _renderers, to_extend
+
+        return _that
+    )()
 
     fill = (where, string_id) ->
         _libs.open {
@@ -465,7 +485,7 @@ template = (spec, that) ->
 
     that.open = (name, where, object, action='add', string_id) ->
         _libs.open {
-            url: spec.base_url + "templates/#{ name }"
+            url: template_url + name 
             success: (data) ->
                 data = that.parse data
                 where.html data
@@ -480,7 +500,9 @@ template = (spec, that) ->
         }
 
     that.extend_renderers = (extensions) ->
-        _.extend tag_renderes, spec.tag_renderers
+        tag_renderers.extend extensions
+
+    that.extend_renderers spec.tag_renderers
     
     inheriter = _.partial init, template, that, spec
     _.extend _libs, inheriter(palantir)
@@ -539,11 +561,18 @@ cache = singleton((spec) ->
         return to_join.join ';'
 
     that.delall = (url) ->
+        model_url = url
+        if url[url.length-1] != '/'
+            index = url.split('').reverse().join('').indexOf('/')
+            model_url = url.slice(0, url.length-index)+'?'
+
         searched = "url:#{ url }"
+        searched_model = "url:#{ model_url }"
         for key,value of _cache
-            if key.indexOf(searched) != -1
-                dirty = true
-                delete _cache[key]
+            if key.indexOf(searched) != -1 or \
+                key.indexOf(searched_model) != -1
+                    dirty = true
+                    delete _cache[key]
 
     prune_old = (percent=20) ->
         now = (new Date()).getTime()
@@ -587,11 +616,43 @@ cache = singleton((spec) ->
 validators = (spec, that) ->
     that = that ? {}
     _helpers = helpers spec
-    managed = []
+
+    # The fields managed by this code
+    managed = {}
+    # The submit handlers
+    handlers = {}
+    # Errors display methods
+    display_methods = []
 
     validators_db = (singleton ->
         _that = {}
-        _validators = {}
+        _validators = {
+            length: (object, kwargs, args...) ->
+                kwargs.min = kwargs.min ? (args[0] ? 0)
+                kwargs.max = kwargs.max ? (args[1] ? Number.MAX_VALUE)
+                errors = []
+
+                length = $.trim(object.value).length
+                if length < kwargs.min
+                    errors.push(__("The input of length #{ length } you entered"+\
+                        " is too short. The minimum length is #{ kwargs.min }"))
+                if length > kwargs.max
+                    errors.push(__("The input of length #{ length } you entered"+\
+                        " is too long. The maximum length is #{ kwargs.max }"))
+                return errors
+
+            email: (object, kwargs, args...) ->
+                regex = kwargs.regex if kwargs.regex? else \
+                    /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,4}$/
+                if not $.trim(object.value).match regex
+                    return [__('The email you entered is incorrect')]
+                return null
+
+            required: (object) ->
+                if $.trim(object.value).length == 0
+                    return [__('This field is obligatory')]
+                return null
+        }
 
         _that.apply = (validator, params) ->
             if _validators[validator] == undefined
@@ -612,27 +673,58 @@ validators = (spec, that) ->
 
         for form in where.find('.form')
             form = $(form)
-            form.attr 'data-validation_id', _helpers.random_string()
-            managed.push form
+            if not form.attr('data-validation_id')?
+                form.attr 'data-validation_id', _helpers.random_string()
+            fields = {}
 
-            form.on 'submit', (e) ->
-                console.log e
-            form.on 'click', "[data-submit='true']", (e) ->
-                console.log e
+            for field in form.find('[data-validators]')
+                $(field).attr 'data-validation_id', _helpers.random_string()
+                validators = []
+
+                for validator in parse_validators(field)
+                    validators.push validator
+
+                fields[$(field).attr('data-validation_id')] = validators
+            
+            for handler in form.find("[data-submit='true']")
+                handler = $(handler)
+                if not handler.attr('data-validation_id')?
+                    handler.attr 'data-validation_id', _helpers.random_string()
+
+                handlers[handler.attr('data-validation_id')] = \
+                    form.attr('data-validation_id')
+
+            managed[form.attr('data-validation_id')] = fields
+
+            form.on 'click', "[data-submit='true']", submit_handler
+
+    submit_handler = (e) ->
+        id = handlers[$(e.target).attr('data-validation_id')]
+        if not id? then return
+
+        errors = test managed[id]
+        if errors.length > 0
+            e.preventDefault()
+            for method in display_methods
+                method errors
 
     that.init = that.discover
 
     that.extend = (to_extend) ->
         validators_db.extend to_extend
 
+    that.extend_display_methods = (method) ->
+        display_methods.push method
+
     that.test = ->
         errors = {}
-        for form in managed
-            errors[form.attr('data-validation_id')] = test form
+        for id,fields of managed
+            errors[id] = test fields
         return errors
 
     inheriter = _.partial init, validators, that, spec
     p = inheriter palantir
+
     __ = p.gettext.gettext
 
     parse_validators = (field) ->
@@ -659,50 +751,21 @@ validators = (spec, that) ->
                         ret_params.push(param[0])
 
             parsed.push [name, ret_params]
-            
 
         return parsed
 
-    test = (where) ->
+    test = (fields) ->
         errors = []
-        for field in where.find("[data-validators]")
-            for validator in parse_validators(field)
+        for id,validators of fields
+            for validator in validators
                 err = validators_db.apply validator[0], validator[1]
                 if err? and err.length > 0
                     errors.push {
-                        field: field
+                        field: id
                         errors: err
                     }
 
         return errors
-
-    that.extend({
-        length: (object, kwargs, args...) ->
-            kwargs.min = kwargs.min ? (args[0] ? 0)
-            kwargs.max = kwargs.max ? (args[1] ? Number.MAX_VALUE)
-            errors = []
-
-            length = $.trim(object.value).length
-            if length < kwargs.min
-                errors.push(__("The input of length #{ length } you entered"+\
-                    " is too short. The minimum length is #{ kwargs.min }"))
-            if length > kwargs.max
-                errors.push(__("The input of length #{ length } you entered"+\
-                    " is too long. The maximum length is #{ kwargs.max }"))
-            return errors
-
-        email: (object, kwargs, args...) ->
-            regex = kwargs.regex if kwargs.regex? else \
-                /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,4}$/
-            if not $.trim(object.value).match regex
-                return [__('The email you entered is incorrect')]
-            return null
-
-        required: (object) ->
-            if $.trim(object.value).length == 0
-                return [__('This field is obligatory')]
-            return null
-    })
 
     return that
         
@@ -853,6 +916,9 @@ model = (spec, that) ->
                 set_value = value
                 Object.defineProperty(ret, prop, {
                     set: (new_value) ->
+                        if typeof new_value != data_def[prop] and
+                            (new_value != null and new_value != undefined)
+                                throw new TypeError()
                         check_deletion(deleted)
 
                         dirty = true
@@ -959,11 +1025,6 @@ palantir = singleton((spec) ->
     spec.placeholder = spec.placeholder ? $('body')
 
     routes = []
-
-    if spec.debug
-        tout = 0
-    else
-        tout = spec.timeout ? 3600*24*2
 
     # Magic generating the base url for the app
     base_url = spec.base_url ? (location.href.match /^.*\//)
@@ -1075,18 +1136,7 @@ palantir = singleton((spec) ->
 
 
     that.template = (name, where, object={}) ->
-        that.open {
-            url: base_url + "templates/#{ name }"
-            success: (data) ->
-                data = _template.parse data
-                where.html data
-
-                _template.bind where
-            palantir_timeout: tout
-        }
-
-    that.extend_renderers = (extensions) ->
-        _template.extend_renderers(extensions)
+        that.templates.open name, where, object
 
     that.extend_code_messages = (data) ->
         if not that.notifier?
@@ -1107,6 +1157,13 @@ palantir = singleton((spec) ->
             fn.apply(null, arguments)
 
     that.goto = (route, params...) ->
+        console.log routes
+        if params.length > 0 and params[0].silent == true
+            res = _.where(routes, {route: route})
+            for matching in res
+                matching.fn params[0]
+            return
+
         route = '#'+that.helpers.add_params route, params
         window.location.hash = route
 
@@ -1143,9 +1200,9 @@ palantir = singleton((spec) ->
     ), 0)
 
     inheriter = _.partial init, palantir, that, spec
-    _template = inheriter(template)
     _cache = inheriter(cache)
 
+    that.templates = inheriter template
     that.notifier = inheriter notifier
     that.helpers = inheriter helpers
     that.gettext = inheriter gettext
