@@ -88,8 +88,8 @@ class SignaturesView(FlaskView):
             rv = pickle.loads(rv)
         return jsonify(stringify_class(rv))
 
-    @crossdomain(origin='*')
     @route('/<id>')
+    @crossdomain(origin='*')
     def get(self, id):
         try:
             signature = db_session.query(Signature).\

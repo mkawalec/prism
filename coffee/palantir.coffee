@@ -206,14 +206,14 @@ notifier = (spec, that) ->
 
     placeholder = $('#alerts')
 
-    that.notify = (req_data) ->
+    that.notify = (req_data, where=placeholder) ->
         if not messages.get_message(req_data)?
             if messages.get_code_message(req_data.status)?
-                show_message(messages.get_code_message, req_data.status)
+                show_message(messages.get_code_message, req_data.status, where)
                 return
             return
 
-        show_message(messages.get_message, req_data)
+        show_message(messages.get_message, req_data, where)
 
     that.extend_code_messages = (data) ->
         messages.extend_code_messages data
@@ -221,7 +221,7 @@ notifier = (spec, that) ->
     that.extend_messages = (data) ->
         messages.extend_messages data
           
-    show_message = (fn, key) ->
+    show_message = (fn, key, where) ->
         alert = $('<div/>', {
             class: "alert alert-#{ fn(key).type }"
         })
@@ -245,7 +245,7 @@ notifier = (spec, that) ->
         alert.append message_wrapper
         alert.hide()
 
-        placeholder.append alert
+        where.append alert
         alert.show 'slide'
 
     inheriter = _.partial init, notifier, that, spec
@@ -518,7 +518,7 @@ template = (spec, that) ->
                     that.bind where, object
 
                 _validators.discover where
-            tout: 3600*48
+            palantir_timeout: 3600*48
         }
 
     that.extend_renderers = (extensions) ->

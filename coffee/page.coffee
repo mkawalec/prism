@@ -11,11 +11,17 @@ letter = (spec, that) ->
 
         p.template('header.html', $('#header'))
         p.template('body.html', $('#body'), that)
-        $(document).on 'click', '#submit', (e) ->
+
+        submitted = false
+        console.log 'calling init'
+        $(document).on 'click', 'button#submit', (e) ->
+            if submitted == true
+                e.preventDefault()
+                return
+
             email = $.trim $('#email')[0].value
             name = $.trim $('#name')[0].value
             comment = $.trim $('#comment')[0].value
-            console.log 'calling?'
 
             if name.length == 0
                 p.notifier.notify 'no_name', $('.podpisz .alerts')
@@ -28,6 +34,8 @@ letter = (spec, that) ->
                 p.notifier.notify 'email_incorrect', $('.podpisz .alerts')
                 return
 
+            submitted = true
+
             model.new (new_obj) ->
                 new_obj.email = email
                 new_obj.name = name
@@ -36,8 +44,10 @@ letter = (spec, that) ->
                 model.submit (data) ->
                     if data?.status?
                         p.notifier.notify 'email_duplicate', $('.podpisz .alerts')
+                        submitted = false
                     else
                         p.notifier.notify 'submit_success', $('.podpisz .alerts')
+                        $('button#submit').addClass 'disabled'
 
     extend_messages = ->
         p.notifier.extend_messages {
@@ -74,7 +84,7 @@ letter = (spec, that) ->
     signatures = ->
         model.get ((data, other) ->
             $('#number_of_sigs').text "#{ other.amount } podpisów"
-        ), {limit: 5}
+        ), {limit: 1}
 
     confirm = p.route 'confirm', (params) ->
         create()
@@ -94,12 +104,11 @@ letter = (spec, that) ->
     # Constructor
     setTimeout((() ->
         hash = location.hash
-        if hash.length == 0 or hash == '#init'
+        if hash.length == 0
             p.goto('init')
         signatures()
     ), 0)
 
-    inheriter = _.partial init, letter, that, spec
 
     return that
 
