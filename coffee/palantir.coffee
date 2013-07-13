@@ -362,11 +362,21 @@ template = (spec, that) ->
     that.bind = (where, actions_object, string_id) ->
         for element in where.find('[data-click]')
             $(element).on 'click', (e) ->
-                e.preventDefault()
-                _libs.goto $(@).attr('data-click'), {
-                    silent: true
-                    string_id: string_id
-                }
+                target = $(e.target)
+                _helpers.delay ->
+                    if target.attr('data-prevent_default') == 'true'
+                        return
+
+                    data = {}
+                    if target.attr('data-silent') != 'false'
+                        data.silent = true
+                    if string_id?
+                        data.string_id = string_id
+
+                    if data.silent != true
+                        _validators.hide()
+
+                    _libs.goto target.attr('data-click'), data
 
         for element in $(where).find('[data-source]')
             ((element) ->
@@ -377,7 +387,18 @@ template = (spec, that) ->
 
         for element in $(where).find("[data-wysiwyg='true']")
             editor = new nicEditor()
-            editor.panelInstance $(element).attr('id')
+            element = $(element)
+
+            editor.panelInstance element.attr('id')
+
+            # Make the validators observe the correct field
+            inner_area = (nicEditors.findEditor element.attr('id')).\
+                getElm()
+            $(inner_area).attr('data-validators', 
+                element.attr('data-validators'))
+            element.attr('data-validators', '')
+            $(inner_area).css 'min-height', '320px'
+           
 
     that.set_details = (element, caching=true, actions) ->
         _libs.open {
@@ -496,7 +517,8 @@ template = (spec, that) ->
                 else
                     that.bind where, object
 
-            tout: 3600
+                _validators.discover where
+            tout: 3600*48
         }
 
     that.extend_renderers = (extensions) ->
@@ -505,9 +527,10 @@ template = (spec, that) ->
     that.extend_renderers spec.tag_renderers
     
     inheriter = _.partial init, template, that, spec
-    _.extend _libs, inheriter(palantir)
-    _helpers = inheriter(helpers)
-    _notifier = inheriter(notifier)
+    _.extend _libs, inheriter palantir
+    _helpers = inheriter helpers
+    _notifier = inheriter notifier 
+    _validators = inheriter validators
     __ = inheriter(gettext).gettext
 
     return that
@@ -516,7 +539,7 @@ cache = singleton((spec) ->
     that = {}
     _helpers = helpers(spec)
 
-    timeout = spec.timeout ? 60
+    timeout = spec.timeout ? 1800
 
     # A cache object structure:
     # obj = {
@@ -564,10 +587,10 @@ cache = singleton((spec) ->
         model_url = url
         if url[url.length-1] != '/'
             index = url.split('').reverse().join('').indexOf('/')
-            model_url = url.slice(0, url.length-index)+'?'
+            model_url = url.slice(0, url.length-index)
 
         searched = "url:#{ url }"
-        searched_model = "url:#{ model_url }"
+        searched_model = "url:#{ model_url };"
         for key,value of _cache
             if key.indexOf(searched) != -1 or \
                 key.indexOf(searched_model) != -1
@@ -621,8 +644,27 @@ validators = (spec, that) ->
     managed = {}
     # The submit handlers
     handlers = {}
-    # Errors display methods
-    display_methods = []
+    # Validations error display methods
+    display_methods = (singleton ->
+        _that = {}
+        _methods = {}
+
+        _that.get = (id) ->
+            return _methods[id]
+
+        _that.all = ->
+            return _methods
+
+        _that.extend = (to_extend, overwrite=false) ->
+            if not overwrite 
+                extend_with = _.omit(to_extend, _.keys(_methods)) 
+            else 
+                extend_with = to_extend
+
+            _.extend(_methods, extend_with)
+
+        return _that
+    )()
 
     validators_db = (singleton ->
         _that = {}
@@ -632,13 +674,18 @@ validators = (spec, that) ->
                 kwargs.max = kwargs.max ? (args[1] ? Number.MAX_VALUE)
                 errors = []
 
-                length = $.trim(object.value).length
+                value = if object.value? then object.value else $(object).text()
+                length = $.trim(value).length
+
+                # The following is oddly formatted thanks to babel being stupid
                 if length < kwargs.min
-                    errors.push(__("The input of length #{ length } you entered"+\
-                        " is too short. The minimum length is #{ kwargs.min }"))
+                    errors.push(__("The input of length ") + length + \
+                        __(' you entered is too short. The minimum length is ')+ \
+                        kwargs.min )
                 if length > kwargs.max
-                    errors.push(__("The input of length #{ length } you entered"+\
-                        " is too long. The maximum length is #{ kwargs.max }"))
+                    errors.push(__("The input of length ") + length + \
+                        __(' you entered is too long. The maximum length is ')+ \
+                        kwargs.min )
                 return errors
 
             email: (object, kwargs, args...) ->
@@ -649,8 +696,21 @@ validators = (spec, that) ->
                 return null
 
             required: (object) ->
-                if $.trim(object.value).length == 0
+                value = if object.value? then object.value else $(object).text()
+                if $.trim(value).length == 0
                     return [__('This field is obligatory')]
+                return null
+
+            decimal: (object) ->
+                value = $.trim(object.value).replace ',', '.'
+                value = value.replace ' ', ''
+
+                decimal_regex = /^[0-9]+(\.[0-9]+)?$/
+                if decimal_regex.test(value) == false
+                    return [__('This doesn\'t look like a number')]
+
+                if object.value != value
+                    object.value = value
                 return null
         }
 
@@ -678,13 +738,21 @@ validators = (spec, that) ->
             fields = {}
 
             for field in form.find('[data-validators]')
-                $(field).attr 'data-validation_id', _helpers.random_string()
+                field = $(field)
+                field.attr 'data-validation_id', _helpers.random_string()
                 validators = []
+                parsers = []
 
-                for validator in parse_validators(field)
+                for validator in parse_validators(field[0])
                     validators.push validator
+                for parser in parse_validators(field[0], 'data-parsers')
+                    parsers.push parser
 
-                fields[$(field).attr('data-validation_id')] = validators
+                methods = {
+                    validators: validators
+                    parsers: parsers
+                }
+                fields[field.attr('data-validation_id')] = methods
             
             for handler in form.find("[data-submit='true']")
                 handler = $(handler)
@@ -694,9 +762,24 @@ validators = (spec, that) ->
                 handlers[handler.attr('data-validation_id')] = \
                     form.attr('data-validation_id')
 
+            form.on 'keyup', 'input,textarea,.nicEdit-main', field_changed
+
             managed[form.attr('data-validation_id')] = fields
 
             form.on 'click', "[data-submit='true']", submit_handler
+            form.on 'submit', submit_event_handler
+
+    field_changed = (e) ->
+        # Handles rechecking the field if its contents changed
+        validation_id = $(e.target).attr('data-validation_id')
+        for id,fields of managed
+            if fields[validation_id] != undefined
+                errors = test managed[id], validation_id
+                return display_errors errors, validation_id
+
+    display_errors = (errors, current_id) ->
+        for name,method of display_methods.all()
+            method.create errors, current_id
 
     submit_handler = (e) ->
         id = handlers[$(e.target).attr('data-validation_id')]
@@ -704,17 +787,22 @@ validators = (spec, that) ->
 
         errors = test managed[id]
         if errors.length > 0
-            e.preventDefault()
-            for method in display_methods
-                method errors
+            $(e.target).attr('data-prevent_default', 'true')
+            display_errors errors
+        else
+            $(e.target).attr('data-prevent_default', 'false')
+
+    submit_event_handler = (e) ->
+        e.preventDefault()
+        submit_handler e
 
     that.init = that.discover
 
     that.extend = (to_extend) ->
         validators_db.extend to_extend
 
-    that.extend_display_methods = (method) ->
-        display_methods.push method
+    that.extend_display_methods = (methods, overwrite) ->
+        display_methods.extend methods, overwrite
 
     that.test = ->
         errors = {}
@@ -722,13 +810,21 @@ validators = (spec, that) ->
             errors[id] = test fields
         return errors
 
+    that.hide = ->
+        # Enforce hiding of all validators
+        for name,method of display_methods.all()
+            method.hide()
+
     inheriter = _.partial init, validators, that, spec
     p = inheriter palantir
 
     __ = p.gettext.gettext
 
-    parse_validators = (field) ->
-        to_parse = $(field).attr('data-validators')
+    parse_validators = (field, attr='data-validators') ->
+        to_parse = $(field).attr(attr)
+        if not to_parse?
+            return []
+
         parsed = []
 
         for validator in to_parse.split(';')
@@ -750,28 +846,41 @@ validators = (spec, that) ->
                     else
                         ret_params.push(param[0])
 
-            parsed.push [name, ret_params]
+            parsed.push {method: name, params: ret_params}
 
         return parsed
 
-    test = (fields) ->
+    test = (fields, current_id) ->
         errors = []
-        for id,validators of fields
-            for validator in validators
-                err = validators_db.apply validator[0], validator[1]
-                if err? and err.length > 0
-                    errors.push {
-                        field: id
-                        errors: err
-                    }
+        for id,methods of fields
+            errors.push.apply(errors, test_field(id, methods, current_id))
+        return errors
+
+    test_field = (id, methods, current_id) ->           
+        errors = []
+
+        # The parsers are applied before validators.
+        # We are not interested in their output
+        for parser in methods.parsers
+            validators_db.apply parser.method, parser.params
+
+        for validator in methods.validators
+            err = validators_db.apply validator.method, validator.params
+            if err? and err.length > 0
+                if not current_id? or current_id == id
+                    $(validator.params[0]).addClass 'validation-error'
+                errors.push {
+                    field: id
+                    errors: err
+                }
+            else if not current_id? or current_id == id
+                $(validator.params[0]).removeClass 'validation-error'
 
         return errors
 
     return that
         
-model = (spec, that) ->
-    that = that ? {}
-
+model = (spec={}, that={}) ->
     autosubmit = spec.autosubmit ? false
 
     last_params = null
@@ -814,7 +923,7 @@ model = (spec, that) ->
                     else
                         ret = makeobj data.data
 
-                    managed.concat(ret)
+                    managed.push.apply(managed, ret)
 
                     other_params = {}
                     for key,value of data
@@ -903,11 +1012,11 @@ model = (spec, that) ->
 
         return model spec
 
-    makeobj = (dict, dirty=false) ->
+    makeobj = (raw_object, dirty=false) ->
         ret = {}
         deleted = false
 
-        for prop, value of dict
+        for prop,value of raw_object
             if typeof value == 'object'
                 ret[prop] = value
                 continue
@@ -916,9 +1025,6 @@ model = (spec, that) ->
                 set_value = value
                 Object.defineProperty(ret, prop, {
                     set: (new_value) ->
-                        if typeof new_value != data_def[prop] and
-                            (new_value != null and new_value != undefined)
-                                throw new TypeError()
                         check_deletion(deleted)
 
                         dirty = true
@@ -939,10 +1045,11 @@ model = (spec, that) ->
                 return
             check_deletion(deleted)
 
-            that.keys ->
+            that.keys (keys) ->
                 data = {}
-                for key, value of data_def
+                for key in keys
                     data[key] = ret[key]
+                data = {data: JSON.stringify data}
 
                 req_type = if ret.string_id? then 'PUT' else 'POST'
                 url = spec.url
@@ -1007,10 +1114,9 @@ model = (spec, that) ->
 
     return that
 
-palantir = singleton((spec) ->
+palantir = singleton((spec={}) ->
     that = {}
-    if not spec?
-        spec = {}
+
     if spec[0]?
         spec = spec[0]
 
@@ -1157,7 +1263,6 @@ palantir = singleton((spec) ->
             fn.apply(null, arguments)
 
     that.goto = (route, params...) ->
-        console.log routes
         if params.length > 0 and params[0].silent == true
             res = _.where(routes, {route: route})
             for matching in res
