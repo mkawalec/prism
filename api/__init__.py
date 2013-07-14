@@ -24,11 +24,11 @@ import json
 import smtplib
 import pickle
 
-@app.route('/api')
+@app.route('/')
 def home():
     return '42'
 
-@app.route('api/confirm/<code_id>', methods=['POST'])
+@app.route('/confirm/<code_id>', methods=['POST'])
 @crossdomain(origin='*')
 def confirm(code_id):
     try:
@@ -130,7 +130,7 @@ class SignaturesView(FlaskView):
         sig = Signature('test', 'test', 'test')
         return jsonify(data=class_spec(sig))
     
-SignaturesView.register(app, route_base='api/signatures/')
+SignaturesView.register(app)
 
 def send_email(signature):
     msg = u'Witaj %(name)s,\n'\
