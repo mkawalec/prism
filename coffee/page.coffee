@@ -15,6 +15,7 @@ letter = (spec, that) ->
         submitted = false
         console.log 'calling init'
         $(document).on 'click', 'button#submit', (e) ->
+            console.log 'calling'
             if submitted == true
                 e.preventDefault()
                 return
@@ -45,6 +46,7 @@ letter = (spec, that) ->
                     if data?.status?
                         p.notifier.notify 'email_duplicate', $('.podpisz .alerts')
                         submitted = false
+                        model.delete new_obj
                     else
                         p.notifier.notify 'submit_success', $('.podpisz .alerts')
                         $('button#submit').addClass 'disabled'

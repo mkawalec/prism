@@ -20,6 +20,8 @@ from .helpers import stringify_class, class_spec
 
 from crossdomain import crossdomain
 
+import json
+import smtplib
 import pickle
 
 @app.route('/')
@@ -102,7 +104,7 @@ class SignaturesView(FlaskView):
 
     @crossdomain(origin='*')
     def post(self):
-        f = request.form
+        f = json.loads(request.form.get('data'))
         if 'name' not in f or 'email' not in f:
             abort(409)
 
@@ -118,11 +120,35 @@ class SignaturesView(FlaskView):
         db_session.commit()
 
         sig.string_id
+        send_email(sig)
         return jsonify(data=stringify_class(sig))
 
     @crossdomain(origin='*')
     def spec(self):
         sig = Signature('test', 'test', 'test')
         return jsonify(data=class_spec(sig))
-
+    
 SignaturesView.register(app)
+
+def send_email(signature):
+    msg = u'Witaj %(name)s,\n'\
+          u'By potwierdzić swój podpis popierający list do Premiera RP \n'\
+          u'w sprawie PRISM, kliknij proszę w link: %(link)s\n\n'\
+          u'Jeśli to nie ty chciałaś wyrazić poparcie listu, zignoruj ten email.'\
+          u'\n\nhttp://bez-inwigilacji.pl' % \
+                dict(name=signature.name, 
+                 link='http://bez-inwigilacji.pl/#confirm?code='+signature.codes[-1].string_id
+         )
+
+    msg = u'From: no-reply@bez-inwigilacji.pl\r\nTo: %s\r\n'\
+          u'Subject: Potwierdzenie podpisu pod petycją\r\n\r\n' % \
+          (signature.email) + msg
+
+    s = smtplib.SMTP('bez-inwigilacji.pl', 587)
+    s.ehlo()
+    s.starttls()
+    s.ehlo()
+    s.login('no-reply@bez-inwigilacji.pl', 'a2dc34')
+    s.sendmail('no-reply@bez-inwigilacji.pl', signature.email, msg.encode('utf-8'))
+
+

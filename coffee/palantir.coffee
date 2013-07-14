@@ -1040,8 +1040,8 @@ model = (spec={}, that={}) ->
             set: (value) -> dirty = value
         })
 
-        ret['__submit'] = (callback, force=false) ->
-            if ret.__dirty == false and not force
+        ret['__submit'] = (callback=( ->), force=false) ->
+            if ret == undefined or (ret.__dirty == false and not force)
                 return
             check_deletion(deleted)
 
@@ -1070,8 +1070,16 @@ model = (spec={}, that={}) ->
                     error: callback
                 }
 
-        ret['__delete'] = (callback) ->
+        ret['__delete'] = (callback= -> ) ->
             check_deletion(deleted)
+
+            if not ret.string_id?
+                for el,i in managed
+                    if el == ret
+                        managed[i] == undefined
+                        break
+                ret = undefined
+                return
 
             p.open {
                 url: spec.url + ret.string_id
