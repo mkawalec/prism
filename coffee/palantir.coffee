@@ -993,7 +993,7 @@ model = (spec={}, that={}) ->
 
     that.keys = (callback) ->
         p.open {
-            url: spec.url + 'spec/'
+            url: spec.url + 'spec'
             success: (data) ->
                 data_def = normalize data.data
                 callback _.keys data.data
