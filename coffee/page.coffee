@@ -3,7 +3,7 @@ letter = (spec, that) ->
     p = palantir(spec)
 
     model = p.model.init {
-        url: 'http://localhost:5000/signatures/'
+        url: 'api/signatures/'
     }
 
     create = p.route 'init', () ->
@@ -92,7 +92,7 @@ letter = (spec, that) ->
         create()
 
         $.ajax {
-            url: "http://localhost:5000/" + "confirm/#{ params.code }"
+            url: "#{ spec.base_url }api/confirm/#{ params.code }"
             type: 'POST'
             success: ->
                 p.notifier.notify 'success'
