@@ -3,3 +3,4 @@ flask-classy==0.6.3
 redis==2.7.5
 psycopg2==2.5
 sqlalchemy==0.8.1
+alembic==0.5.0
