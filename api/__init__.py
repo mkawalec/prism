@@ -50,7 +50,7 @@ def confirm(code_id):
         abort(500)
 
 class SignaturesView(FlaskView):
-
+    @route('/')
     @crossdomain(origin='*')
     def index(self):
         key_prefix = 'signatures-'
@@ -102,6 +102,7 @@ class SignaturesView(FlaskView):
             abort(404)
         return jsonify(stringify_class(rv))
 
+    @route('/', methods=['POST'])
     @crossdomain(origin='*')
     def post(self):
         f = json.loads(request.form.get('data'))
@@ -123,6 +124,7 @@ class SignaturesView(FlaskView):
         send_email(sig)
         return jsonify(data=stringify_class(sig))
 
+    @route('/spec')
     @crossdomain(origin='*')
     def spec(self):
         sig = Signature('test', 'test', 'test')
