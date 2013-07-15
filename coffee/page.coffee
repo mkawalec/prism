@@ -13,7 +13,6 @@ letter = (spec, that) ->
         p.template('body.html', $('#body'), that)
 
         submitted = false
-        console.log 'calling init'
         $(document).on 'click', 'button#submit', (e) ->
             console.log 'calling'
             if submitted == true
@@ -22,7 +21,7 @@ letter = (spec, that) ->
 
             email = $.trim $('#email')[0].value
             name = $.trim $('#name')[0].value
-            comment = $.trim $('#comment')[0].value
+            comment = $.trim $('#comment').text()
 
             if name.length == 0
                 p.notifier.notify 'no_name', $('.podpisz .alerts')
