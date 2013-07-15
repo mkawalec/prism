@@ -24,6 +24,8 @@ import json
 import smtplib
 import pickle
 
+import log
+
 @app.route('/')
 def home():
     return '42'
