@@ -3,7 +3,7 @@ letter = (spec, that) ->
     p = palantir(spec)
 
     model = p.model.init {
-        url: 'api/signatures/'
+        url: 'http://localhost:5000/signatures/'
     }
 
     create = p.route 'init', () ->
@@ -14,14 +14,13 @@ letter = (spec, that) ->
 
         submitted = false
         $(document).on 'click', 'button#submit', (e) ->
-            console.log 'calling'
             if submitted == true
                 e.preventDefault()
                 return
 
             email = $.trim $('#email')[0].value
             name = $.trim $('#name')[0].value
-            comment = $.trim $('#comment').text()
+            comment = $.trim $('#comment')[0].value
 
             if name.length == 0
                 p.notifier.notify 'no_name', $('.podpisz .alerts')
@@ -91,7 +90,7 @@ letter = (spec, that) ->
         create()
 
         $.ajax {
-            url: "#{ spec.base_url }api/confirm/#{ params.code }"
+            url: "http://localhost:5000/confirm/#{ params.code }"
             type: 'POST'
             success: ->
                 p.notifier.notify 'success'
