@@ -39,7 +39,7 @@ class Signature(Boilerplate, Base):
 
     name = Column(String(200))
     email = Column(String(300), unique=True)
-    comment = Column(String(160))
+    comment = Column(String())
 
     confirmed = Column(Boolean)
 
