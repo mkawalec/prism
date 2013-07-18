@@ -83,7 +83,7 @@ letter = (spec, that) ->
 
     signatures = ->
         model.get ((data, other) ->
-            $('#number_of_sigs').text "#{ other.amount } podpisów"
+            $('#number_of_sigs').text "Już #{ other.amount } osób poparło nasz list"
         ), {limit: 1}
 
     confirm = p.route 'confirm', (params) ->
