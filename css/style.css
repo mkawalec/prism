@@ -14,6 +14,11 @@
     padding: 5px;
 }
 
+hr {
+    float:left;
+    width: 100%;
+}
+
 p {
     letter-spacing: 1px;
     text-indent: 40px;
@@ -53,8 +58,8 @@ p {
 }
 
 .signed-by {
-    margin-top: 40px;
     float: left;
+    margin-bottom: 40px;
 }
 
 .signed-by b {
